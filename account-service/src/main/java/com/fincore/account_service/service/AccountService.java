@@ -11,8 +11,8 @@ import com.fincore.account_service.repository.AccountRepo;
 @Service
 public class AccountService {
     private final AccountRepo accountRepo;
-    private final CustomerClient customerClient;
-    
+    private final CustomerClient customerClient; 
+
     public AccountService(AccountRepo accountRepo, CustomerClient customerClient) {
         this.accountRepo = accountRepo;
         this.customerClient = customerClient;
