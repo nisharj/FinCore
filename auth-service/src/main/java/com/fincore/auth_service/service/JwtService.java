@@ -1,10 +1,12 @@
 package com.fincore.auth_service.service;
 
 
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 import javax.crypto.SecretKey;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.fincore.auth_service.entity.User;
@@ -14,9 +16,13 @@ import io.jsonwebtoken.security.Keys;
 
 @Service
 public class JwtService {
-    private SecretKey secretKey = Keys.hmacShaKeyFor(
-        "fincore-super-secret-key-which-is-long-enough-123456".getBytes()
-    );
+    private final SecretKey secretKey;
+    private final long expiration;
+
+    public JwtService(@Value("${jwt.secret}") String secret, @Value("${jwt.expiration}") long expiration) {
+        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.expiration = expiration;
+    }
 
     public String generateToken(User user){
         return Jwts.builder()
