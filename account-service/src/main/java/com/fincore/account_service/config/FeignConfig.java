@@ -15,18 +15,11 @@ public class FeignConfig {
     public RequestInterceptor requestInterceptor() {
 
         return requestTemplate -> {
+            ServletRequestAttributes attributes = (ServletRequestAttributes)RequestContextHolder.getRequestAttributes();
 
-            ServletRequestAttributes attributes =
-                    (ServletRequestAttributes)
-                            RequestContextHolder.getRequestAttributes();
+            if (attributes == null) { return; }
 
-            if (attributes == null) {
-                return;
-            }
-
-            String authorization =
-                    attributes.getRequest()
-                            .getHeader(HttpHeaders.AUTHORIZATION);
+            String authorization =attributes.getRequest().getHeader(HttpHeaders.AUTHORIZATION);
 
             if (authorization != null) {
                 requestTemplate.header(

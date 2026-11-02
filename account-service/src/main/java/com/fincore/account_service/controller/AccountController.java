@@ -48,21 +48,13 @@ public class AccountController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Account> updateAccount(
-            @PathVariable Long id,
-            @RequestBody Account account) {
-
-        return ResponseEntity.ok(
-                accountService.updateAccount(id, account)
-        );
+    public ResponseEntity<Account> updateAccount(@PathVariable Long id, @RequestBody Account account) {
+        return ResponseEntity.ok(accountService.updateAccount(id, account));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteAccount(
-            @PathVariable Long id) {
-
+    public ResponseEntity<Void> deleteAccount(@PathVariable Long id) {
         accountService.deleteAccount(id);
-
         return ResponseEntity.noContent().build();
     }
 }

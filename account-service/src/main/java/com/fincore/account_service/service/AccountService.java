@@ -15,17 +15,13 @@ public class AccountService {
     private final AccountRepo accountRepo;
     private final CustomerClient customerClient;
 
-    public AccountService(
-            AccountRepo accountRepo,
-            CustomerClient customerClient) {
+    public AccountService(AccountRepo accountRepo, CustomerClient customerClient) {
         this.accountRepo = accountRepo;
         this.customerClient = customerClient;
     }
 
     public Account createAccount(Account account) {
-        // Verify that the customer exists
         customerClient.getCustomerById(account.getCustomerId());
-
         return accountRepo.save(account);
     }
 
@@ -34,9 +30,7 @@ public class AccountService {
     }
 
     public Account getAccountById(Long id) {
-        return accountRepo.findById(id)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException("Account not found with ID: " + id));
+        return accountRepo.findById(id).orElseThrow(() -> new ResourceNotFoundException("Account not found with ID: " + id));
     }
 
     public List<Account> getAccountsByCustomer(Long customerId) {
@@ -46,7 +40,6 @@ public class AccountService {
     public Account updateAccount(Long id, Account account) {
         Account existing = getAccountById(id);
 
-        // Verify the customer before changing the association
         customerClient.getCustomerById(account.getCustomerId());
 
         existing.setAccountNumber(account.getAccountNumber());

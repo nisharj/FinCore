@@ -42,54 +42,31 @@ public class SecurityConfig {
 
     @Bean
     public Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter() {
-
         return jwt -> {
-
             String role = jwt.getClaimAsString("role");
 
             List<SimpleGrantedAuthority> authorities =
-                    List.of(
-                            new SimpleGrantedAuthority("ROLE_" + role)
-                    );
+                    List.of(new SimpleGrantedAuthority("ROLE_" + role));
 
-            return new JwtAuthenticationToken(
-                    jwt,
-                    authorities,
-                    jwt.getSubject()
-            );
+            return new JwtAuthenticationToken(jwt, authorities, jwt.getSubject());
         };
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http) throws Exception {
-
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-
             .authorizeHttpRequests(auth -> auth
-
-                .requestMatchers(HttpMethod.GET, "/accounts/**")
-                    .hasAnyRole("USER", "ADMIN")
-
-                .requestMatchers(HttpMethod.POST, "/accounts/**")
-                    .hasAnyRole("USER", "ADMIN")
-
-                .requestMatchers(HttpMethod.PUT, "/accounts/**")
-                    .hasAnyRole("USER", "ADMIN")
-
-                .requestMatchers(HttpMethod.DELETE, "/accounts/**")
-                    .hasRole("ADMIN")
-
-                .anyRequest()
-                    .authenticated()
+                .requestMatchers(HttpMethod.GET, "/accounts/**").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/accounts/**").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/accounts/**").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/accounts/**").hasRole("ADMIN")
+                .anyRequest().authenticated()
             )
 
             .oauth2ResourceServer(oauth2 ->
                 oauth2.jwt(jwt ->
-                    jwt.jwtAuthenticationConverter(
-                        jwtAuthenticationConverter()
-                    )
+                    jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())
                 )
             );
 
