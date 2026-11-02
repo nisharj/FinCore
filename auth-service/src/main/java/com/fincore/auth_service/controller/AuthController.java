@@ -5,17 +5,21 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fincore.auth_service.dto.LoginRequest;
 import com.fincore.auth_service.dto.LoginResponse;
+import com.fincore.auth_service.dto.RegisterRequest;
 import com.fincore.auth_service.dto.RegisterResponse;
 import com.fincore.auth_service.entity.User;
 import com.fincore.auth_service.service.AuthService;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import jakarta.validation.Valid;
 
 
 @RestController
 @RequestMapping("/auth")
+@Validated
 public class AuthController {
     private final AuthService authService;
 
@@ -24,8 +28,8 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<RegisterResponse> register(@RequestBody User user) {
-        User savedUser = authService.register(user);
+    public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
+        User savedUser = authService.register(request);
 
         RegisterResponse response = new RegisterResponse(
             savedUser.getId(),
@@ -37,7 +41,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
 
         String token = authService.login(
                 request.getUsername(),

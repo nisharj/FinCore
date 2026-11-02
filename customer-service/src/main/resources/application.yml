@@ -1,3 +1,7 @@
+fincore:
+  internal:
+    secret: ${FINCORE_INTERNAL_SECRET}
+
 spring:
   application:
     name: customer-service

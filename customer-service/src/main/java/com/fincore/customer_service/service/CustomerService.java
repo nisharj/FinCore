@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import com.fincore.customer_service.entity.Customer;
 import com.fincore.customer_service.repository.CustomerRepo;
+import com.fincore.customer_service.exception.ResourceNotFoundException;
 
 import lombok.RequiredArgsConstructor;
 
@@ -14,32 +15,38 @@ import lombok.RequiredArgsConstructor;
 public class CustomerService {
     private final CustomerRepo customerRepo;
 
-    public Customer createCustomer(Customer customer){
+    public Customer createCustomer(Customer customer) {
         return customerRepo.save(customer);
     }
 
-    public List<Customer> getAllCustomers(){
+    public List<Customer> getAllCustomers() {
         return customerRepo.findAll();
     }
 
-    public Customer getCustomerById(Long id){
+    public Customer getCustomerById(Long id) {
         return customerRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Customer not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Customer not found with ID: " + id));
     }
 
-    public Customer updateCustomer(Long id, Customer customer){
+    public Customer updateCustomer(Long id, Customer customer) {
         Customer existingCustomer = getCustomerById(id);
-        
+
         existingCustomer.setName(customer.getName());
         existingCustomer.setEmail(customer.getEmail());
-        existingCustomer.setPhoneNumber(customer.getPhoneNumber()); 
+        existingCustomer.setPhoneNumber(customer.getPhoneNumber());
         existingCustomer.setAddress(customer.getAddress());
         existingCustomer.setKycStatus(customer.getKycStatus());
 
         return customerRepo.save(existingCustomer);
     }
 
-    public void deleteCustomer(Long id){
+    public void deleteCustomer(Long id) {
         customerRepo.deleteById(id);
+    }
+
+    public Customer getCustomerByEmail(String email) {
+        return customerRepo.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Customer not found with email: " + email));
     }
 }

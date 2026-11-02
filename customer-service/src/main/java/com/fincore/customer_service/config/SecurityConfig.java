@@ -69,20 +69,13 @@ public class SecurityConfig {
 
             .authorizeHttpRequests(auth -> auth
 
-                .requestMatchers(HttpMethod.GET, "/customers/**")
-                    .hasAnyRole("USER", "ADMIN")
-
-                .requestMatchers(HttpMethod.POST, "/customers/**")
-                    .hasAnyRole("USER", "ADMIN")
-
-                .requestMatchers(HttpMethod.PUT, "/customers/**")
-                    .hasAnyRole("USER", "ADMIN")
-
-                .requestMatchers(HttpMethod.DELETE, "/customers/**")
-                    .hasRole("ADMIN")
-
-                .anyRequest()
-                    .authenticated()
+                
+                .requestMatchers(HttpMethod.GET, "/customers/internal/by-email").permitAll()
+                .requestMatchers(HttpMethod.GET, "/customers/**").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/customers/**").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/customers/**").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/customers/**").hasRole("ADMIN")
+                .anyRequest().authenticated()
             )
 
             .oauth2ResourceServer(oauth2 ->

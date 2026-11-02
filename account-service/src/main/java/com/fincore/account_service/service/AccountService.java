@@ -7,40 +7,50 @@ import org.springframework.stereotype.Service;
 import com.fincore.account_service.client.CustomerClient;
 import com.fincore.account_service.entity.Account;
 import com.fincore.account_service.repository.AccountRepo;
+import com.fincore.account_service.exception.ResourceNotFoundException;
 
 @Service
 public class AccountService {
-    private final AccountRepo accountRepo;
-    private final CustomerClient customerClient; 
 
-    public AccountService(AccountRepo accountRepo, CustomerClient customerClient) {
+    private final AccountRepo accountRepo;
+    private final CustomerClient customerClient;
+
+    public AccountService(
+            AccountRepo accountRepo,
+            CustomerClient customerClient) {
         this.accountRepo = accountRepo;
         this.customerClient = customerClient;
     }
 
     public Account createAccount(Account account) {
+        // Verify that the customer exists
         customerClient.getCustomerById(account.getCustomerId());
+
         return accountRepo.save(account);
     }
 
-    public List<Account> getAllAccounts(){
+    public List<Account> getAllAccounts() {
         return accountRepo.findAll();
     }
 
     public Account getAccountById(Long id) {
         return accountRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Account not found"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Account not found with ID: " + id));
     }
 
     public List<Account> getAccountsByCustomer(Long customerId) {
         return accountRepo.findByCustomerId(customerId);
     }
 
-    public Account updateAccount(Long id, Account account){
+    public Account updateAccount(Long id, Account account) {
         Account existing = getAccountById(id);
 
+        // Verify the customer before changing the association
+        customerClient.getCustomerById(account.getCustomerId());
+
         existing.setAccountNumber(account.getAccountNumber());
-        existing.setCustomerId(id);
+        existing.setCustomerId(account.getCustomerId());
         existing.setAccountType(account.getAccountType());
         existing.setBalance(account.getBalance());
         existing.setStatus(account.getStatus());
@@ -48,7 +58,8 @@ public class AccountService {
         return accountRepo.save(existing);
     }
 
-    public void deleteAccount(Long id){
-        accountRepo.deleteById(id);
+    public void deleteAccount(Long id) {
+        Account existing = getAccountById(id);
+        accountRepo.delete(existing);
     }
 }
