@@ -25,3 +25,7 @@ eureka:
 
 jwt:
   secret: fincore-super-secret-key-which-is-long-enough-123456
+
+fincore:
+  internal:
+    secret: ${FINCORE_INTERNAL_SECRET}
