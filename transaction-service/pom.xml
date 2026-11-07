@@ -11,8 +11,8 @@
 	<groupId>com.fincore</groupId>
 	<artifactId>transaction-service</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
+	<name>transaction-service</name>
+	<description>FinCore Transaction Management Microservice</description>
 	<url/>
 	<licenses>
 		<license/>

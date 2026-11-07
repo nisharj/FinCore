@@ -29,11 +29,7 @@ public class SecurityConfig {
 
     @Bean
     public JwtDecoder jwtDecoder() {
-
-        SecretKey key = new SecretKeySpec(
-                secret.getBytes(StandardCharsets.UTF_8),
-                "HmacSHA384"
-        );
+        SecretKey key = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA384");
 
         return NimbusJwtDecoder.withSecretKey(key)
                 .macAlgorithm(MacAlgorithm.HS384)
@@ -42,9 +38,7 @@ public class SecurityConfig {
 
     @Bean
     public Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter() {
-        return jwt -> {
-            String role = jwt.getClaimAsString("role");
-
+        return jwt -> { String role = jwt.getClaimAsString("role");
             List<SimpleGrantedAuthority> authorities =
                     List.of(new SimpleGrantedAuthority("ROLE_" + role));
 
@@ -57,6 +51,7 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.POST, "/accounts/internal/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/accounts/**").hasAnyRole("USER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/accounts/**").hasAnyRole("USER", "ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/accounts/**").hasAnyRole("USER", "ADMIN")

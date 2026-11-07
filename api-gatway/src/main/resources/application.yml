@@ -16,7 +16,7 @@ spring:
             - id: account-service
               uri: lb://account-service
               predicates:
-                - Path=/accounts/**
+                - Path=/accounts,/accounts/{id},/accounts/customer/{customerId}
 
 server:
   port: 8080
@@ -27,4 +27,4 @@ eureka:
       defaultZone: http://localhost:8761/eureka/
 
 jwt:
-  secret: fincore-super-secret-key-which-is-long-enough-123456
+  secret: ${JWT_SECRET}
