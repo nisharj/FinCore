@@ -1,3 +1,4 @@
+
 package com.fincore.api_gatway.config;
 
 import org.springframework.context.annotation.Bean;
@@ -54,25 +55,21 @@ public class JwtGatewayConfig {
                 .build()
                 .and(
                     route("customer-service-normal")
-                        .route(
-                            normalCustomerMethods,
-                            http()
-                        )
+                        .route(normalCustomerMethods, http())
                         .filter(jwtAuthentication())
                         .filter(lb("customer-service"))
                         .build()
                 );
     }
 
-
-    
     // =========================
     // ACCOUNT ROUTES
     // =========================
 
     private RequestPredicate publicAccountPath() {
 
-        return request -> { String path = request.path();
+        return request -> {
+            String path = request.path();
 
             String[] segments = path.split("/");
 
@@ -80,7 +77,9 @@ public class JwtGatewayConfig {
                 return true;
             }
 
-            if (segments.length == 3 && segments[1].equals("accounts") && !segments[2].equals("internal")) {
+            if (segments.length == 3
+                    && segments[1].equals("accounts")
+                    && !segments[2].equals("internal")) {
                 return true;
             }
 
@@ -124,9 +123,34 @@ public class JwtGatewayConfig {
                 );
     }
 
+    // =========================
+    // TRANSACTION ROUTES
+    // =========================
 
+    @Bean
+    public RouterFunction<ServerResponse> transactionRoute() {
 
-    // ======================
+        RequestPredicate transactionMethods = request -> {
+
+            String method = request.method().name();
+
+            boolean allowedMethod =
+                    method.equals("GET") || method.equals("POST");
+
+            boolean transactionPath =
+                    RequestPredicates.path("/transactions/**").test(request);
+
+            return allowedMethod && transactionPath;
+        };
+
+        return route("transaction-service")
+                .route(transactionMethods, http())
+                .filter(jwtAuthentication())
+                .filter(lb("transaction-service"))
+                .build();
+    }
+
+    // =========================
     // JWT AUTHENTICATION
     // =========================
 
@@ -152,9 +176,11 @@ public class JwtGatewayConfig {
                 System.out.println("Authenticated user: " + username + " | Role: " + role);
 
                 return next.handle(request);
-            } 
+            }
             catch (Exception e) {
-                return ServerResponse.status(HttpStatus.UNAUTHORIZED).body("Invalid or expired token");
+                return ServerResponse
+                        .status(HttpStatus.UNAUTHORIZED)
+                        .body("Invalid or expired token");
             }
         };
     }
@@ -163,18 +189,14 @@ public class JwtGatewayConfig {
     // ADMIN AUTHORIZATION
     // =========================
 
-    private HandlerFilterFunction<ServerResponse, ServerResponse>
-            adminOnly() {
+    private HandlerFilterFunction<ServerResponse, ServerResponse> adminOnly() {
 
         return (request, next) -> {
 
-            String authHeader =
-                    request.headers()
-                            .firstHeader(HttpHeaders.AUTHORIZATION);
+            String authHeader = request.headers()
+                    .firstHeader(HttpHeaders.AUTHORIZATION);
 
-            if (authHeader == null ||
-                    !authHeader.startsWith("Bearer ")) {
-
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 return ServerResponse
                         .status(HttpStatus.UNAUTHORIZED)
                         .body("Missing or invalid Authorization header");
@@ -184,21 +206,16 @@ public class JwtGatewayConfig {
 
             try {
 
-                Claims claims =
-                        jwtService.validateToken(token);
+                Claims claims = jwtService.validateToken(token);
 
                 String username = claims.getSubject();
                 String role = claims.get("role", String.class);
 
                 System.out.println(
-                        "ADMIN CHECK → User: "
-                        + username
-                        + " | Role: "
-                        + role
+                        "ADMIN CHECK → User: " + username + " | Role: " + role
                 );
 
                 if (!"ADMIN".equals(role)) {
-
                     return ServerResponse
                             .status(HttpStatus.FORBIDDEN)
                             .body("Admin access required");
@@ -207,7 +224,6 @@ public class JwtGatewayConfig {
                 return next.handle(request);
 
             } catch (Exception e) {
-
                 return ServerResponse
                         .status(HttpStatus.UNAUTHORIZED)
                         .body("Invalid or expired token");

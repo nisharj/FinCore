@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
@@ -50,7 +51,11 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            )
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.GET, "/accounts/internal/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/accounts/internal/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/accounts/**").hasAnyRole("USER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/accounts/**").hasAnyRole("USER", "ADMIN")
@@ -60,9 +65,7 @@ public class SecurityConfig {
             )
 
             .oauth2ResourceServer(oauth2 ->
-                oauth2.jwt(jwt ->
-                    jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())
-                )
+                oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
             );
 
         return http.build();

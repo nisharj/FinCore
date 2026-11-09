@@ -25,36 +25,20 @@ public class InternalAccountOperationService {
     private final AccountOperationRepository operationRepo;
     private final AuthClient authClient;
 
-    public InternalAccountOperationService(
-            AccountRepo accountRepo,
-            AccountOperationRepository operationRepo,
-            AuthClient authClient) {
-
+    public InternalAccountOperationService(AccountRepo accountRepo, AccountOperationRepository operationRepo, AuthClient authClient) {
         this.accountRepo = accountRepo;
         this.operationRepo = operationRepo;
         this.authClient = authClient;
     }
 
     @Transactional
-    public AccountOperationResponse debit(
-            Long accountId,
-            AccountOperationRequest request,
-            String internalSecret) {
-
-        return processOperation(
-                accountId,
-                request,
-                internalSecret,
-                AccountOperationType.DEBIT);
+    public AccountOperationResponse debit(Long accountId, AccountOperationRequest request, String internalSecret) {
+        return processOperation(accountId, request, internalSecret, AccountOperationType.DEBIT);
     }
 
     @Transactional
     public AccountOperationResponse credit(Long accountId, AccountOperationRequest request, String internalSecret) {
-        return processOperation(
-                accountId,
-                request,
-                internalSecret,
-                AccountOperationType.CREDIT);
+        return processOperation(accountId, request, internalSecret, AccountOperationType.CREDIT);
     }
 
     private AccountOperationResponse processOperation(Long accountId, AccountOperationRequest request, String internalSecret, AccountOperationType operationType) {
@@ -65,41 +49,25 @@ public class InternalAccountOperationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Valid username, transaction reference and positive amount are required");
         }
 
-        // Verify the customer's identity using Auth Service.
         CustomerLinkResponse customer = authClient.getCustomerLink(request.username(), internalSecret);
 
-        if (customer == null ||
-                !customer.isVerified() ||
-                customer.getCustomerId() == null) {
-
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "Customer verification is required");
+        if (customer == null || !customer.isVerified() || customer.getCustomerId() == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Customer verification is required");
         }
 
-        // Lock the account row to prevent concurrent balance modifications.
         Account account = accountRepo.findByIdForUpdate(accountId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Account not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found"));
 
         // Verify ownership.
         if (!customer.getCustomerId().equals(account.getCustomerId())) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "You do not have permission to operate on this account");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to operate on this account");
         }
 
         if (!"ACTIVE".equalsIgnoreCase(account.getStatus())) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Account is not active");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Account is not active");
         }
 
-        // Idempotency check.
-        var existingOperation = operationRepo.findByTransactionReferenceAndOperationType(
-                        request.transactionReference(),
-                        operationType);
+        var existingOperation = operationRepo.findByTransactionReferenceAndOperationType(request.transactionReference(), operationType);
 
         if (existingOperation.isPresent()) {
             AccountOperation previous = existingOperation.get();
@@ -108,11 +76,7 @@ public class InternalAccountOperationService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Transaction reference was already used with different details");
             }
 
-            return new AccountOperationResponse(
-                    account.getId(),
-                    account.getBalance(),
-                    request.transactionReference(),
-                    "ALREADY_PROCESSED");
+            return new AccountOperationResponse(account.getId(), account.getBalance(), request.transactionReference(), "ALREADY_PROCESSED");
         }
 
         BigDecimal newBalance;
@@ -120,9 +84,7 @@ public class InternalAccountOperationService {
         if (operationType == AccountOperationType.DEBIT) {
 
             if (account.getBalance().compareTo(request.amount()) < 0) {
-                throw new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Insufficient account balance");
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Insufficient account balance");
             }
 
             newBalance = account.getBalance().subtract(request.amount());
@@ -132,21 +94,97 @@ public class InternalAccountOperationService {
         }
 
         account.setBalance(newBalance);
+        accountRepo.save(account);
 
+        AccountOperation operation = new AccountOperation(
+                request.transactionReference(), operationType,
+                accountId, request.amount());
+
+        operationRepo.save(operation);
+
+        return new AccountOperationResponse(account.getId(), newBalance, request.transactionReference(), "SUCCESS");
+    }
+
+
+    @Transactional(readOnly = true)
+    public AccountOperationResponse getOperationStatus(UUID transactionReference, AccountOperationType operationType) {
+        if (transactionReference == null || operationType == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Transaction reference and operation type are required");
+        }
+
+        var operation = operationRepo
+                .findByTransactionReferenceAndOperationType(transactionReference, operationType);
+
+        if (operation.isEmpty()) {
+            return new AccountOperationResponse(null, null, transactionReference, "NOT_FOUND");
+        }
+
+        AccountOperation existing = operation.get();
+
+        return new AccountOperationResponse(existing.getAccountId(), null, transactionReference, "ALREADY_PROCESSED"
+        );
+    }
+
+    
+    @Transactional
+    public AccountOperationResponse creditTransfer(Long accountId, AccountOperationRequest request) {
+
+        if (request == null
+                || request.transactionReference() == null
+                || request.amount() == null
+                || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Valid transaction reference and positive amount are required"
+            );
+        }
+
+        // Lock destination account.
+        Account account = accountRepo.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Destination account not found"
+                ));
+
+        if (!"ACTIVE".equalsIgnoreCase(account.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Destination account is not active"
+            );
+        }
+
+        // Check idempotency.
+        var existingOperation =
+                operationRepo.findByTransactionReferenceAndOperationType(request.transactionReference(), AccountOperationType.CREDIT);
+
+        if (existingOperation.isPresent()) {
+
+            AccountOperation previous = existingOperation.get();
+
+            if (!previous.getAccountId().equals(accountId)
+                    || previous.getAmount().compareTo(request.amount()) != 0) {
+
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Transaction reference was already used with different details");
+            }
+
+            return new AccountOperationResponse(
+                    account.getId(), account.getBalance(),
+                    request.transactionReference(),
+                    "ALREADY_PROCESSED"
+            );
+        }
+
+        BigDecimal newBalance = account.getBalance().add(request.amount());
+
+        account.setBalance(newBalance);
         accountRepo.save(account);
 
         AccountOperation operation = new AccountOperation(
                 request.transactionReference(),
-                operationType,
-                accountId,
-                request.amount());
+                AccountOperationType.CREDIT,
+                accountId, request.amount()
+        );
 
         operationRepo.save(operation);
 
-        return new AccountOperationResponse(
-                account.getId(),
-                newBalance,
-                request.transactionReference(),
-                "SUCCESS");
+        return new AccountOperationResponse(account.getId(), newBalance, request.transactionReference(), "SUCCESS");
     }
 }

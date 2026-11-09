@@ -57,6 +57,9 @@ public class Transaction {
 
     private LocalDateTime completedAt;
 
+    @Column(nullable = true, length = 100)
+    private String initiatedBy;
+
     @PrePersist
     protected void onCreate() {
         if (referenceId == null) {
@@ -72,83 +75,34 @@ public class Transaction {
         }
     }
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
 
-    public UUID getReferenceId() {
-        return referenceId;
-    }
+    public UUID getReferenceId() {return referenceId; }
+    public void setReferenceId(UUID referenceId) { this.referenceId = referenceId; }
 
-    public void setReferenceId(UUID referenceId) {
-        this.referenceId = referenceId;
-    }
+    public String getIdempotencyKey() { return idempotencyKey; }
+    public void setIdempotencyKey(String idempotencyKey) {  this.idempotencyKey = idempotencyKey; }
 
-    public String getIdempotencyKey() {
-        return idempotencyKey;
-    }
+    public Long getFromAccountId() { return fromAccountId;}
+    public void setFromAccountId(Long fromAccountId) { this.fromAccountId = fromAccountId; }
 
-    public void setIdempotencyKey(String idempotencyKey) {
-        this.idempotencyKey = idempotencyKey;
-    }
+    public Long getToAccountId() { return toAccountId; }
+    public void setToAccountId(Long toAccountId) { this.toAccountId = toAccountId; }
 
-    public Long getFromAccountId() {
-        return fromAccountId;
-    }
+    public BigDecimal getAmount() { return amount; }
+    public void setAmount(BigDecimal amount) { this.amount = amount; }
 
-    public void setFromAccountId(Long fromAccountId) {
-        this.fromAccountId = fromAccountId;
-    }
+    public TransactionType getTransactionType() { return transactionType; }
+    public void setTransactionType(TransactionType transactionType) { this.transactionType = transactionType; }
 
-    public Long getToAccountId() {
-        return toAccountId;
-    }
+    public TransactionStatus getStatus() { return status; }
+    public void setStatus(TransactionStatus status) { this.status = status; }
 
-    public void setToAccountId(Long toAccountId) {
-        this.toAccountId = toAccountId;
-    }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
-    public BigDecimal getAmount() {
-        return amount;
-    }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public LocalDateTime getCompletedAt() { return completedAt; }
 
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
-
-    public TransactionType getTransactionType() {
-        return transactionType;
-    }
-
-    public void setTransactionType(TransactionType transactionType) {
-        this.transactionType = transactionType;
-    }
-
-    public TransactionStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(TransactionStatus status) {
-        this.status = status;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public LocalDateTime getCompletedAt() {
-        return completedAt;
-    }
-
-    public void setCompletedAt(LocalDateTime completedAt) {
-        this.completedAt = completedAt;
-    }
+    public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
 }

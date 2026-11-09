@@ -11,9 +11,7 @@ import com.fincore.account_service.enums.AccountOperationType;
 
 @Repository
 public interface AccountOperationRepository extends JpaRepository<AccountOperation, Long> {
-
     Optional<AccountOperation> findByTransactionReferenceAndOperationType(
-        UUID transactionReference,
-        AccountOperationType operationType
+        UUID transactionReference, AccountOperationType operationType
     );
 }

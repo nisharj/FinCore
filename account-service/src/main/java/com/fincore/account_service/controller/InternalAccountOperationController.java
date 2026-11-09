@@ -2,6 +2,9 @@ package com.fincore.account_service.controller;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.UUID;
+
+import com.fincore.account_service.enums.AccountOperationType;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -28,25 +31,21 @@ public class InternalAccountOperationController {
     }
 
     private void validateInternalSecret(String suppliedSecret) {
-        if (suppliedSecret == null ||
-                !MessageDigest.isEqual(
+        if (suppliedSecret == null || !MessageDigest.isEqual(
                         internalSecret.getBytes(StandardCharsets.UTF_8),
                         suppliedSecret.getBytes(StandardCharsets.UTF_8))) {
 
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "Invalid internal service credentials");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid internal service credentials");
         }
     }
 
     @PostMapping("/{accountId}/debit")
     public AccountOperationResponse debit(
-            @PathVariable Long accountId,
-            @Valid @RequestBody AccountOperationRequest request,
-            @RequestHeader("X-Internal-Secret") String secret) {
-
+        @PathVariable Long accountId,
+        @Valid @RequestBody AccountOperationRequest request, 
+        @RequestHeader("X-Internal-Secret") String secret) {
+        
         validateInternalSecret(secret);
-
         return operationService.debit(accountId, request, secret);
     }
 
@@ -57,7 +56,28 @@ public class InternalAccountOperationController {
             @RequestHeader("X-Internal-Secret") String secret) {
 
         validateInternalSecret(secret);
-
         return operationService.credit(accountId, request, secret);
+    }
+
+    @GetMapping("/operations/{transactionReference}/{operationType}")
+    public AccountOperationResponse getOperationStatus(
+            @PathVariable UUID transactionReference,
+            @PathVariable AccountOperationType operationType,
+            @RequestHeader("X-Internal-Secret") String secret) {
+
+        validateInternalSecret(secret);
+
+        return operationService.getOperationStatus(transactionReference, operationType);
+    }
+
+    @PostMapping("/transfers/{accountId}/credit")
+    public AccountOperationResponse creditTransfer(
+            @PathVariable Long accountId,
+            @RequestBody AccountOperationRequest request,
+            @RequestHeader("X-Internal-Secret") String secret) {
+
+        validateInternalSecret(secret);
+
+        return operationService.creditTransfer(accountId, request);
     }
 }
