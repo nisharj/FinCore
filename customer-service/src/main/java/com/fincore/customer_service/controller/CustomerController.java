@@ -27,47 +27,28 @@ public class CustomerController {
     }
 
     @PostMapping
-    public ResponseEntity<Customer> createCustomer(
-            @RequestBody Customer customer) {
-
-        return ResponseEntity.ok(
-                customerService.createCustomer(customer)
-        );
+    public ResponseEntity<Customer> createCustomer(@RequestBody Customer customer) {
+        return ResponseEntity.ok(customerService.createCustomer(customer));
     }
 
     @GetMapping
     public ResponseEntity<List<Customer>> getAllCustomers() {
-
-        return ResponseEntity.ok(
-                customerService.getAllCustomers()
-        );
+        return ResponseEntity.ok(customerService.getAllCustomers());
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Customer> getCustomer(
-            @PathVariable Long id) {
-
-        return ResponseEntity.ok(
-                customerService.getCustomerById(id)
-        );
+    public ResponseEntity<Customer> getCustomer(@PathVariable Long id) {
+        return ResponseEntity.ok(customerService.getCustomerById(id));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Customer> updateCustomer(
-            @PathVariable Long id,
-            @RequestBody Customer customer) {
-
-        return ResponseEntity.ok(
-                customerService.updateCustomer(id, customer)
-        );
+    public ResponseEntity<Customer> updateCustomer(@PathVariable Long id,@RequestBody Customer customer) {
+        return ResponseEntity.ok(customerService.updateCustomer(id, customer));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteCustomer(
-            @PathVariable Long id) {
-
+    public ResponseEntity<Void> deleteCustomer(@PathVariable Long id) {
         customerService.deleteCustomer(id);
-
         return ResponseEntity.noContent().build();
     }
 
@@ -88,9 +69,6 @@ public class CustomerController {
 
         Customer customer = customerService.getCustomerByEmail(email);
 
-        return ResponseEntity.ok(
-                new InternalCustomerResponse(
-                        customer.getId(),
-                        customer.getEmail()));
+        return ResponseEntity.ok(new InternalCustomerResponse(customer.getId(), customer.getEmail()));
     }
 }

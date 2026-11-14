@@ -100,6 +100,9 @@ public class GlobalExceptionHandler {
 
                         case "Customer verification is required" ->
                                 "CUSTOMER_NOT_VERIFIED";
+                        
+                        case "Invalid internal service credentials" ->
+                                "INVALID_INTERNAL_CREDENTIALS";
 
                         default -> "ACCOUNT_OPERATION_ERROR";
                 };

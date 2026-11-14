@@ -12,68 +12,69 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    @ExceptionHandler(InvalidCredentialsException.class)
-    public ResponseEntity<ErrorResponse> handleInvalidCredentials(
-            InvalidCredentialsException ex) {
-        return buildResponse(
-                HttpStatus.UNAUTHORIZED,
-                ex.getMessage());
-    }
+        private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ErrorResponse> handleIllegalArgument(
-            IllegalArgumentException ex) {
-        return buildResponse(
-                HttpStatus.BAD_REQUEST,
-                ex.getMessage());
-    }
+        @ExceptionHandler(InvalidCredentialsException.class)
+        public ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex) {
+                return buildResponse(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        }
 
-    @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(
-            DataIntegrityViolationException ex) {
-        return buildResponse(
-                HttpStatus.CONFLICT,
-                "Username already exists");
-    }
+        @ExceptionHandler(IllegalArgumentException.class)
+        public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
+                return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
 
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ErrorResponse> handleInvalidJson(
-            HttpMessageNotReadableException ex) {
-        return buildResponse(
-                HttpStatus.BAD_REQUEST,
-                "Malformed or invalid JSON request");
-    }
+        @ExceptionHandler(DataIntegrityViolationException.class)
+        public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+                return buildResponse(HttpStatus.CONFLICT, "Username already exists");
+        }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidation(
-            MethodArgumentNotValidException ex) {
-        return buildResponse(
-                HttpStatus.BAD_REQUEST,
-                "Request validation failed");
-    }
+        @ExceptionHandler(HttpMessageNotReadableException.class)
+        public ResponseEntity<ErrorResponse> handleInvalidJson(HttpMessageNotReadableException ex) {
+                return buildResponse(HttpStatus.BAD_REQUEST, "Malformed or invalid JSON request");
+        }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleUnexpectedException(
-            Exception ex,
-            HttpServletRequest request) {
-            logger.error("Unhandled exception while processing {}", request.getRequestURI(), ex);
-            return buildResponse(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "An unexpected error occurred");
-    }
+        @ExceptionHandler(MethodArgumentNotValidException.class)
+        public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
+                return buildResponse(HttpStatus.BAD_REQUEST, "Request validation failed");
+        }
 
-    private ResponseEntity<ErrorResponse> buildResponse(
-            HttpStatus status,
-            String message) {
-        return ResponseEntity
-                .status(status)
-                .body(new ErrorResponse(message));
-    }
+        // Preserve the HTTP status thrown by ResponseStatusException
+        @ExceptionHandler(ResponseStatusException.class)
+        public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException ex) {
+                HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+
+                String message = ex.getReason() != null
+                                ? ex.getReason()
+                                : status.getReasonPhrase();
+
+                return buildResponse(status, message);
+        }
+
+        // Missing internal service credentials
+        @ExceptionHandler(MissingRequestHeaderException.class)
+        public ResponseEntity<ErrorResponse> handleMissingRequestHeader(MissingRequestHeaderException ex) {
+                logger.warn("Required request header is missing: {}", ex.getHeaderName());
+
+                return buildResponse(HttpStatus.FORBIDDEN, "Missing internal service credentials");
+        }
+
+        @ExceptionHandler(Exception.class)
+        public ResponseEntity<ErrorResponse> handleUnexpectedException(Exception ex, HttpServletRequest request) {
+                logger.error("Unhandled exception while processing {}", request.getRequestURI(), ex);
+
+                return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+        }
+
+        private ResponseEntity<ErrorResponse> buildResponse(HttpStatus status, String message) {
+                return ResponseEntity.status(status).body(new ErrorResponse(message));
+        }
 }

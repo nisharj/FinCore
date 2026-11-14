@@ -1,3 +1,4 @@
+
 package com.fincore.auth_service.controller;
 
 import java.nio.charset.StandardCharsets;
@@ -31,20 +32,20 @@ public class InternalAuthController {
     }
 
     @GetMapping("/customer-link")
-    public ResponseEntity<CustomerLinkResponse> getCustomerLink(
-            @RequestParam String username, @RequestHeader("X-Internal-Secret") String suppliedSecret) {
+    public ResponseEntity<CustomerLinkResponse> getCustomerLink(@RequestParam String username,
+            @RequestHeader(value = "X-Internal-Secret", required = false)
+            String suppliedSecret) {
 
-        boolean validSecret = MessageDigest.isEqual(
-                internalSecret.getBytes(StandardCharsets.UTF_8),
-                suppliedSecret.getBytes(StandardCharsets.UTF_8)
-        );
+        if (suppliedSecret == null || suppliedSecret.isBlank()
+                || !MessageDigest.isEqual(
+                        internalSecret.getBytes(StandardCharsets.UTF_8),
+                        suppliedSecret.getBytes(StandardCharsets.UTF_8))) {
 
-        if (!validSecret) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid internal secret");
         }
 
         User user = userRepo.findByUsername(username)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,"User not found"));
 
         return ResponseEntity.ok(new CustomerLinkResponse(user.getCustomerId(), user.isCustomerVerified()));
     }

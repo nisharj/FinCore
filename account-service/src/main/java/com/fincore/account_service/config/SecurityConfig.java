@@ -55,12 +55,18 @@ public class SecurityConfig {
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authorizeHttpRequests(auth -> auth
+                // Internal endpoints
                 .requestMatchers(HttpMethod.GET, "/accounts/internal/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/accounts/internal/**").permitAll()
+
+                // Public endpoints
                 .requestMatchers(HttpMethod.GET, "/accounts/**").hasAnyRole("USER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/accounts/**").hasAnyRole("USER", "ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/accounts/**").hasAnyRole("USER", "ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/accounts/**").hasAnyRole("USER", "ADMIN")
+
+                // Admin only endpoints
+                .requestMatchers(HttpMethod.DELETE, "/accounts/**").hasRole("ADMIN")
+                
                 .anyRequest().authenticated()
             )
 

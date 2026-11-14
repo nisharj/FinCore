@@ -1,11 +1,19 @@
 
 package com.fincore.transaction_service.controller;
 
+import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.validation.annotation.Validated;
 
@@ -88,6 +96,55 @@ public class TransactionController {
         }
 
         TransactionResponse response = transactionService.transfer(request, authentication.getName(),idempotencyKey);
+
+        return ResponseEntity.ok(response);
+    }
+
+
+    // =========================
+    // TRANSACTION HISTORY
+    // =========================
+
+    @GetMapping("/history")
+    public ResponseEntity<Page<TransactionResponse>> getMyTransactions(
+            Authentication authentication,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Authentication required");
+        }
+
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid pagination parameters");
+        }
+
+        Pageable pageable = PageRequest.of(
+                page,size,
+                Sort.by(Sort.Direction.DESC, "createdAt")
+        );
+
+        Page<TransactionResponse> response =transactionService.getMyTransactions(authentication.getName(),pageable);
+
+        return ResponseEntity.ok(response);
+    }
+
+
+    // =========================
+    // TRANSACTION BY REFERENCE
+    // =========================
+
+    @GetMapping("/{referenceId}")
+    public ResponseEntity<TransactionResponse> getTransactionByReference(@PathVariable UUID referenceId,Authentication authentication) {
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+
+        TransactionResponse response = transactionService.getTransactionByReference(
+                                    referenceId,
+                                    authentication.getName()
+                                );
 
         return ResponseEntity.ok(response);
     }

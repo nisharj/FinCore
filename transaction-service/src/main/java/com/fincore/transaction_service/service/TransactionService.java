@@ -11,6 +11,8 @@ import jakarta.persistence.EntityManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -330,6 +332,31 @@ public class TransactionService {
         }
 
         transactionRepository.save(transaction);
+
+        return toResponse(transaction);
+    }
+
+
+    // =========================
+    // TRANSACTION HISTORY
+    // =========================
+
+    public Page<TransactionResponse> getMyTransactions(String username, Pageable pageable) {
+        return transactionRepository
+                .findByInitiatedBy(username, pageable)
+                .map(this::toResponse);
+    }
+
+
+    // =========================
+    // TRANSACTION BY REFERENCE
+    // =========================
+
+    public TransactionResponse getTransactionByReference(UUID referenceId,String username) {
+
+        Transaction transaction = transactionRepository
+                .findByReferenceIdAndInitiatedBy(referenceId, username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,"Transaction not found"));
 
         return toResponse(transaction);
     }

@@ -33,9 +33,18 @@ public class JwtGatewayConfig {
     // CUSTOMER ROUTES
     // =========================
 
+    private RequestPredicate publicCustomerPath() {
+        return request ->
+                RequestPredicates.path("/customers/**").test(request)
+                && !request.path().startsWith("/customers/internal/");
+    }
+
     @Bean
     public RouterFunction<ServerResponse> customerRoute() {
 
+        RequestPredicate publicPath = publicCustomerPath();
+
+        // GET, POST, PUT → USER or ADMIN
         RequestPredicate normalCustomerMethods = request -> {
 
             String method = request.method().name();
@@ -43,16 +52,21 @@ public class JwtGatewayConfig {
             return (method.equals("GET")
                     || method.equals("POST")
                     || method.equals("PUT"))
-                    && RequestPredicates.path("/customers/**").test(request);
+                    && publicPath.test(request);
         };
+
+        // DELETE → ADMIN ONLY
+        RequestPredicate adminDeleteMethod = request ->
+                request.method().name().equals("DELETE")
+                        && publicPath.test(request);
 
         return route("customer-service")
 
-                // DELETE → ADMIN ONLY
-                .DELETE("/customers/**", http())
+                .route(adminDeleteMethod, http())
                 .filter(adminOnly())
                 .filter(lb("customer-service"))
                 .build()
+
                 .and(
                     route("customer-service-normal")
                         .route(normalCustomerMethods, http())
@@ -160,28 +174,35 @@ public class JwtGatewayConfig {
             String authHeader = request.headers().firstHeader(HttpHeaders.AUTHORIZATION);
 
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return ServerResponse
-                        .status(HttpStatus.UNAUTHORIZED)
+                return ServerResponse.status(HttpStatus.UNAUTHORIZED)
                         .body("Missing or invalid Authorization header");
             }
 
-            String token = authHeader.substring(7);
+            // String token = authHeader.substring(7);
+            Claims claims;
 
             try {
-                Claims claims = jwtService.validateToken(token);
+                claims = jwtService.validateToken(authHeader.substring(7));
 
                 String username = claims.getSubject();
                 String role = claims.get("role", String.class);
 
+                if (username == null || username.isBlank()
+                        || role == null || (!role.equals("USER") && !role.equals("ADMIN"))) {
+
+                    return ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                            .body("Invalid token claims");
+                }
+
                 System.out.println("Authenticated user: " + username + " | Role: " + role);
 
-                return next.handle(request);
             }
             catch (Exception e) {
-                return ServerResponse
-                        .status(HttpStatus.UNAUTHORIZED)
-                        .body("Invalid or expired token");
+                return ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                .body("Invalid or expired token");
             }
+
+            return next.handle(request);
         };
     }
 
@@ -193,8 +214,7 @@ public class JwtGatewayConfig {
 
         return (request, next) -> {
 
-            String authHeader = request.headers()
-                    .firstHeader(HttpHeaders.AUTHORIZATION);
+            String authHeader = request.headers().firstHeader(HttpHeaders.AUTHORIZATION);
 
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 return ServerResponse
@@ -211,13 +231,17 @@ public class JwtGatewayConfig {
                 String username = claims.getSubject();
                 String role = claims.get("role", String.class);
 
-                System.out.println(
-                        "ADMIN CHECK → User: " + username + " | Role: " + role
-                );
+                if (username == null || username.isBlank() || role == null
+                        || (!role.equals("USER") && !role.equals("ADMIN"))) {
+
+                    return ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                            .body("Invalid token claims");
+                }
+
+                System.out.println("ADMIN CHECK → User: " + username + " | Role: " + role);
 
                 if (!"ADMIN".equals(role)) {
-                    return ServerResponse
-                            .status(HttpStatus.FORBIDDEN)
+                    return ServerResponse.status(HttpStatus.FORBIDDEN)
                             .body("Admin access required");
                 }
 

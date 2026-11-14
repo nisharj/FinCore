@@ -2,21 +2,21 @@ spring:
   application:
     name: api-gateway
 
-  cloud:
-    gateway:
-      server:
-        webmvc:
-          routes:
+  # cloud:
+  #   gateway:
+  #     server:
+  #       webmvc:
+  #         routes:
 
-            - id: customer-service
-              uri: lb://customer-service
-              predicates:
-                - Path=/customers/**
+  #           - id: customer-service
+  #             uri: lb://customer-service
+  #             predicates:
+  #               - Path=/customers/**
              
-            - id: account-service
-              uri: lb://account-service
-              predicates:
-                - Path=/accounts,/accounts/{id},/accounts/customer/{customerId}
+  #           - id: account-service
+  #             uri: lb://account-service
+  #             predicates:
+  #               - Path=/accounts,/accounts/{id},/accounts/customer/{customerId}
 
 server:
   port: 8080

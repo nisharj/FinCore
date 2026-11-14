@@ -15,6 +15,8 @@ import com.fincore.account_service.dto.AccountOperationRequest;
 import com.fincore.account_service.dto.AccountOperationResponse;
 import com.fincore.account_service.service.InternalAccountOperationService;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import jakarta.validation.Valid;
 
 @RestController
@@ -43,7 +45,7 @@ public class InternalAccountOperationController {
     public AccountOperationResponse debit(
         @PathVariable Long accountId,
         @Valid @RequestBody AccountOperationRequest request, 
-        @RequestHeader("X-Internal-Secret") String secret) {
+        @RequestHeader(value = "X-Internal-Secret", required = false) String secret) {
         
         validateInternalSecret(secret);
         return operationService.debit(accountId, request, secret);
@@ -53,7 +55,7 @@ public class InternalAccountOperationController {
     public AccountOperationResponse credit(
             @PathVariable Long accountId,
             @Valid @RequestBody AccountOperationRequest request,
-            @RequestHeader("X-Internal-Secret") String secret) {
+            @RequestHeader(value = "X-Internal-Secret", required = false) String secret) {
 
         validateInternalSecret(secret);
         return operationService.credit(accountId, request, secret);
@@ -63,7 +65,7 @@ public class InternalAccountOperationController {
     public AccountOperationResponse getOperationStatus(
             @PathVariable UUID transactionReference,
             @PathVariable AccountOperationType operationType,
-            @RequestHeader("X-Internal-Secret") String secret) {
+            @RequestHeader(value = "X-Internal-Secret", required = false) String secret) {
 
         validateInternalSecret(secret);
 
@@ -74,7 +76,7 @@ public class InternalAccountOperationController {
     public AccountOperationResponse creditTransfer(
             @PathVariable Long accountId,
             @RequestBody AccountOperationRequest request,
-            @RequestHeader("X-Internal-Secret") String secret) {
+            @RequestHeader(value = "X-Internal-Secret", required = false) String secret) {
 
         validateInternalSecret(secret);
 
