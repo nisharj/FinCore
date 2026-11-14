@@ -29,6 +29,9 @@ fincore:
   internal:
     secret: ${FINCORE_INTERNAL_SECRET}
 
+  reconciliation:
+    fixed-delay: 30000 # 30 seconds
+
 jwt:
   secret: ${JWT_SECRET}
   

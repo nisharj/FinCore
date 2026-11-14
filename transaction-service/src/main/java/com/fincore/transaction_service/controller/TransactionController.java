@@ -39,8 +39,7 @@ public class TransactionController {
             Authentication authentication) {
 
         if (idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Idempotency-Key must contain 1 to 100 characters");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Idempotency-Key must contain 1 to 100 characters");
         }
 
         if (authentication == null || !authentication.isAuthenticated()) {
@@ -62,21 +61,14 @@ public class TransactionController {
             Authentication authentication) {
 
         if (idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Invalid Idempotency-Key");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid Idempotency-Key");
         }
 
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new ResponseStatusException(
-                    HttpStatus.UNAUTHORIZED,
-                    "Authentication required");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Authentication required");
         }
 
-        TransactionResponse response = transactionService.withdraw(
-                request,
-                authentication.getName(),
-                idempotencyKey);
+        TransactionResponse response = transactionService.withdraw(request, authentication.getName(),idempotencyKey);
 
         return ResponseEntity.ok(response);
     }
@@ -88,21 +80,14 @@ public class TransactionController {
             Authentication authentication) {
 
         if (idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Invalid Idempotency-Key");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid Idempotency-Key");
         }
 
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new ResponseStatusException(
-                    HttpStatus.UNAUTHORIZED,
-                    "Authentication required");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
 
-        TransactionResponse response = transactionService.transfer(
-                request,
-                authentication.getName(),
-                idempotencyKey);
+        TransactionResponse response = transactionService.transfer(request, authentication.getName(),idempotencyKey);
 
         return ResponseEntity.ok(response);
     }

@@ -9,22 +9,24 @@ import com.fincore.transaction_service.enums.TransactionType;
 
 public record TransactionResponse(
 
-    UUID referenceId,
+        UUID referenceId,
 
-    Long fromAccountId,
+        Long fromAccountId,
 
-    Long toAccountId,
+        Long toAccountId,
 
-    BigDecimal amount,
+        BigDecimal amount,
 
-    TransactionType transactionType,
+        TransactionType transactionType,
 
-    TransactionStatus status,
+        TransactionStatus status,
 
-    String description,
+        String description,
 
-    LocalDateTime createdAt,
+        String failureReason,
 
-    LocalDateTime completedAt
+        LocalDateTime createdAt,
+
+        LocalDateTime completedAt
 
 ) {}

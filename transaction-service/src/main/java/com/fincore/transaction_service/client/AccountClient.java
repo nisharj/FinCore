@@ -37,4 +37,11 @@ public interface AccountClient {
         @PathVariable("operationType") AccountOperationType operationType,
         @RequestHeader("X-Internal-Secret") String internalSecret
     );
+
+    @PostMapping("/accounts/internal/transfers/{accountId}/credit")
+    AccountOperationResponse creditTransfer(
+        @PathVariable("accountId") Long accountId,
+        @RequestBody AccountOperationRequest request,
+        @RequestHeader("X-Internal-Secret") String internalSecret
+    );
 }

@@ -3,6 +3,8 @@ package com.fincore.account_service.service;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import jakarta.persistence.EntityManager;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,11 +26,13 @@ public class InternalAccountOperationService {
     private final AccountRepo accountRepo;
     private final AccountOperationRepository operationRepo;
     private final AuthClient authClient;
+    private final EntityManager entityManager;
 
-    public InternalAccountOperationService(AccountRepo accountRepo, AccountOperationRepository operationRepo, AuthClient authClient) {
+    public InternalAccountOperationService(AccountRepo accountRepo, AccountOperationRepository operationRepo, AuthClient authClient, EntityManager entityManager) {
         this.accountRepo = accountRepo;
         this.operationRepo = operationRepo;
         this.authClient = authClient;
+        this.entityManager = entityManager;
     }
 
     @Transactional
@@ -48,6 +52,8 @@ public class InternalAccountOperationService {
 
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Valid username, transaction reference and positive amount are required");
         }
+
+        lockOperation(request.transactionReference(), operationType);
 
         CustomerLinkResponse customer = authClient.getCustomerLink(request.username(), internalSecret);
 
@@ -139,6 +145,8 @@ public class InternalAccountOperationService {
             );
         }
 
+        lockOperation(request.transactionReference(), AccountOperationType.CREDIT);
+
         // Lock destination account.
         Account account = accountRepo.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -186,5 +194,16 @@ public class InternalAccountOperationService {
         operationRepo.save(operation);
 
         return new AccountOperationResponse(account.getId(), newBalance, request.transactionReference(), "SUCCESS");
+    }
+
+
+    private void lockOperation(UUID transactionReference,
+                           AccountOperationType operationType) {
+
+        String lockKey = transactionReference + ":" + operationType.name();
+
+        entityManager.createNativeQuery("SELECT pg_advisory_xact_lock(hashtextextended(CAST(:lockKey AS text), 0))")
+                .setParameter("lockKey", lockKey)
+                .getSingleResult();
     }
 }
