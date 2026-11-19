@@ -29,6 +29,3 @@ jwt:
 fincore:
     internal:
         secret: ${FINCORE_INTERNAL_SECRET}
-
-    # testing:
-    #     fail-next-transfer-credit: true

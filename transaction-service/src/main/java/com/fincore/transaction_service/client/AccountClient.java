@@ -44,4 +44,18 @@ public interface AccountClient {
         @RequestBody AccountOperationRequest request,
         @RequestHeader("X-Internal-Secret") String internalSecret
     );
+
+    @PostMapping("/accounts/internal/transfers/{accountId}/refund")
+    AccountOperationResponse refund(
+            @PathVariable("accountId") Long accountId,
+            @RequestBody AccountOperationRequest request,
+            @RequestHeader("X-Internal-Secret") String internalSecret
+    );
+    
+
+    @GetMapping("/accounts/internal/{accountId}/transfer-validation")
+    AccountOperationResponse validateTransferDestination(
+            @PathVariable("accountId") Long accountId,
+            @RequestHeader("X-Internal-Secret") String internalSecret
+    );
 }

@@ -18,6 +18,7 @@ import com.fincore.account_service.service.InternalAccountOperationService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import jakarta.validation.Valid;
+import jakarta.annotation.PostConstruct;
 
 @RestController
 @RequestMapping("/accounts/internal")
@@ -33,13 +34,14 @@ public class InternalAccountOperationController {
     }
 
     private void validateInternalSecret(String suppliedSecret) {
-        if (suppliedSecret == null || !MessageDigest.isEqual(
+        if (suppliedSecret == null || suppliedSecret.isBlank() ||  !MessageDigest.isEqual(
                         internalSecret.getBytes(StandardCharsets.UTF_8),
                         suppliedSecret.getBytes(StandardCharsets.UTF_8))) {
 
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid internal service credentials");
         }
     }
+
 
     @PostMapping("/{accountId}/debit")
     public AccountOperationResponse debit(
@@ -68,9 +70,9 @@ public class InternalAccountOperationController {
             @RequestHeader(value = "X-Internal-Secret", required = false) String secret) {
 
         validateInternalSecret(secret);
-
         return operationService.getOperationStatus(transactionReference, operationType);
     }
+
 
     @PostMapping("/transfers/{accountId}/credit")
     public AccountOperationResponse creditTransfer(
@@ -81,5 +83,27 @@ public class InternalAccountOperationController {
         validateInternalSecret(secret);
 
         return operationService.creditTransfer(accountId, request);
+    }
+
+
+    @PostMapping("/transfers/{accountId}/refund")
+    public AccountOperationResponse refund(
+            @PathVariable Long accountId, @Valid @RequestBody AccountOperationRequest request,
+            @RequestHeader(value = "X-Internal-Secret", required = false) String secret) {
+
+        validateInternalSecret(secret);
+
+        return operationService.refund(accountId, request);
+    }
+
+
+    @GetMapping("/{accountId}/transfer-validation")
+    public AccountOperationResponse validateTransferDestination(
+            @PathVariable Long accountId,
+            @RequestHeader(value = "X-Internal-Secret", required = false) String secret) {
+
+        validateInternalSecret(secret);
+
+        return operationService.validateTransferDestination(accountId);
     }
 }

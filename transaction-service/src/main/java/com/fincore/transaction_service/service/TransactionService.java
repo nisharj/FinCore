@@ -43,6 +43,9 @@ public class TransactionService {
     private final AccountClient accountClient;
     private final EntityManager entityManager;
 
+    private static final String REFUND_PENDING_PREFIX = "REFUND_PENDING:";
+
+
     @Value("${fincore.internal.secret}")
     private String internalSecret;
 
@@ -230,7 +233,104 @@ public class TransactionService {
         return processTransfer(transaction);
     }
 
+
+    private void processPendingRefund(Transaction transaction) {
+
+        UUID referenceId = transaction.getReferenceId();
+
+        AccountOperationRequest request = new AccountOperationRequest(
+                transaction.getInitiatedBy(),
+                referenceId,
+                transaction.getAmount()
+        );
+
+        try {
+            // First check whether the refund was already processed.
+            AccountOperationResponse refundStatus =
+                    accountClient.getOperationStatus(
+                            referenceId,
+                            AccountOperationType.REFUND,
+                            internalSecret
+                    );
+
+            if (refundStatus == null) {
+                return;
+            }
+
+            if ("NOT_FOUND".equals(refundStatus.status())) {
+
+                // Refund has not happened. Request it now.
+                refundStatus = accountClient.refund(
+                        transaction.getFromAccountId(),
+                        request,
+                        internalSecret
+                );
+            }
+
+            if (refundStatus != null
+                    && ("SUCCESS".equals(refundStatus.status())
+                    || "ALREADY_PROCESSED".equals(refundStatus.status()))) {
+
+                markTransferFailedAfterRefund(transaction);
+            }
+
+        } catch (FeignException ex) {
+
+            // Keep REFUND_PENDING. Reconciliation will retry safely.
+            System.err.println(
+                    "Refund outcome uncertain for transaction "
+                    + referenceId + ". HTTP Status: " + ex.status()
+            );
+        }
+    }
+
+
+    private void markRefundPending(Transaction transaction, AccountFailure failure) {
+
+        String reason = "DESTINATION_CREDIT_FAILED: " + failure.errorCode() + ": " + failure.message();
+
+        reason = reason.substring(0, Math.min(reason.length(), 450));
+
+        transaction.setFailureReason(REFUND_PENDING_PREFIX + reason);
+
+        // Persist this marker BEFORE calling the refund API.
+        transactionRepository.saveAndFlush(transaction);
+    }
+
+
+    private void markTransferFailedAfterRefund(Transaction transaction) {
+
+        String originalReason = transaction.getFailureReason();
+
+        if (originalReason != null && originalReason.startsWith(REFUND_PENDING_PREFIX)) {
+
+            originalReason = originalReason.substring(REFUND_PENDING_PREFIX.length()).trim();
+        }
+
+        String reason = "DESTINATION_CREDIT_FAILED_REFUNDED: " + (originalReason == null ? "Refund completed" : originalReason);
+
+        transaction.setStatus(TransactionStatus.FAILED);
+        transaction.setFailureReason(reason.substring(0, Math.min(reason.length(), 500)));
+        transaction.setCompletedAt(LocalDateTime.now());
+
+        transactionRepository.saveAndFlush(transaction);
+    }
+
+
+    private boolean isPermanentDestinationCreditFailure(AccountFailure failure) {
+        return failure != null
+                && switch (failure.errorCode()) {
+                    case "ACCOUNT_NOT_FOUND", "ACCOUNT_INACTIVE" -> true;
+                    default -> false;
+                };
+    }
+
+
     private TransactionResponse processTransfer(Transaction transaction) {
+        if (transaction.getFailureReason() != null && transaction.getFailureReason().startsWith(REFUND_PENDING_PREFIX)) {
+            processPendingRefund(transaction);
+            return toResponse(transaction);
+        }
 
         UUID referenceId = transaction.getReferenceId();
         AccountOperationRequest operationRequest = new AccountOperationRequest(transaction.getInitiatedBy(), referenceId, transaction.getAmount());
@@ -238,26 +338,43 @@ public class TransactionService {
 
         // STEP 1: Verify sender debit
         try {
-            AccountOperationResponse debitStatus =
-                    accountClient.getOperationStatus(referenceId, AccountOperationType.DEBIT, internalSecret);
+            AccountOperationResponse debitStatus = accountClient.getOperationStatus(referenceId, AccountOperationType.DEBIT, internalSecret);
 
             if (debitStatus == null) {
                 return toResponse(transaction);
             }
 
             if ("NOT_FOUND".equals(debitStatus.status())) {
+                try {
+                    AccountOperationResponse validation = accountClient.validateTransferDestination(transaction.getToAccountId(), internalSecret);
 
-                AccountOperationResponse debitResponse =
-                        accountClient.debit(
-                                transaction.getFromAccountId(),
-                                operationRequest, internalSecret
-                        );
+                    if (validation == null || !"VALID".equals(validation.status())) {
+                        return toResponse(transaction);
+                    }
 
-                if (debitResponse == null || !("SUCCESS".equals(debitResponse.status()) || "ALREADY_PROCESSED".equals(debitResponse.status()))) {
+                } 
+                catch (FeignException ex) {
+
+                    AccountFailure failure = extractAccountFailure(ex);
+
+                    if (isConfirmedBusinessFailure(failure)) {
+                        markFailed(transaction, failure);
+                    } 
+                    else {
+                        System.err.println("Destination validation uncertain. HTTP Status: " + ex.status());
+                    }
+
                     return toResponse(transaction);
                 }
 
-            } 
+                // STEP 1B: Debit sender only after destination validation
+                AccountOperationResponse debitResponse = accountClient.debit( transaction.getFromAccountId(),operationRequest, internalSecret);
+
+                if (debitResponse == null || !("SUCCESS".equals(debitResponse.status())
+                        || "ALREADY_PROCESSED".equals(debitResponse.status()))) {
+                    return toResponse(transaction);
+                }
+            }            
             else if (!"ALREADY_PROCESSED".equals(debitStatus.status())) {
                 return toResponse(transaction);
             }
@@ -279,47 +396,90 @@ public class TransactionService {
 
 
         // STEP 2: Verify recipient credit
+        AccountOperationResponse creditStatus;
+
         try {
-            AccountOperationResponse creditStatus =
-                    accountClient.getOperationStatus(
-                            referenceId,
-                            AccountOperationType.CREDIT,
-                            internalSecret
-                    );
+            creditStatus = accountClient.getOperationStatus(referenceId, AccountOperationType.CREDIT, internalSecret);
+        } 
+        catch (FeignException ex) {
+            System.err.println("Unable to verify recipient credit status. HTTP Status: " + ex.status());
+            return toResponse(transaction);
+        }
 
-            if (creditStatus == null) {
-                return toResponse(transaction);
-            }
+        if (creditStatus == null) {
+            return toResponse(transaction);
+        }
 
-            if ("NOT_FOUND".equals(creditStatus.status())) {
+        if ("NOT_FOUND".equals(creditStatus.status())) {
 
+            try {
                 AccountOperationResponse creditResponse =
                         accountClient.creditTransfer(
                                 transaction.getToAccountId(),
                                 operationRequest, internalSecret
                         );
 
-                if (creditResponse == null || !("SUCCESS".equals(creditResponse.status()) || "ALREADY_PROCESSED".equals(creditResponse.status()))) {
+                if (creditResponse == null
+                        || !("SUCCESS".equals(creditResponse.status())
+                        || "ALREADY_PROCESSED".equals(creditResponse.status()))) {
                     return toResponse(transaction);
                 }
 
             } 
-            else if (!"ALREADY_PROCESSED".equals(creditStatus.status())) {
-                return toResponse(transaction);
+            catch (FeignException ex) {
+
+                AccountFailure failure = extractAccountFailure(ex);
+
+                // Temporary or unknown failures must not trigger refunds.
+                if (!isPermanentDestinationCreditFailure(failure)) {
+                    String reason = "Destination credit pending: "
+                            + (failure == null ? "Unknown error" : failure.errorCode() + ": " + failure.message());
+
+                    transaction.setFailureReason(reason.substring(0, Math.min(reason.length(), 500)));
+                    transactionRepository.save(transaction);
+
+                    System.err.println("Transfer credit pending. HTTP Status: " + ex.status());
+                    return toResponse(transaction);
+                }
+
+                // A permanent failure occurred. Verify that credit did not succeed.
+                try {
+                    AccountOperationResponse confirmedCreditStatus =
+                            accountClient.getOperationStatus(referenceId, AccountOperationType.CREDIT, internalSecret);
+
+                    if (confirmedCreditStatus == null) {
+                        return toResponse(transaction);
+                    }
+
+                    if ("ALREADY_PROCESSED".equals(confirmedCreditStatus.status())) {
+                        // Credit succeeded despite the error response.
+                        // Continue to STEP 3 and mark the transfer SUCCESS.
+                    } 
+                    else if ("NOT_FOUND".equals(confirmedCreditStatus.status())) {
+
+                        // Persist refund marker before attempting compensation.
+                        markRefundPending(transaction, failure);
+
+                        // Refund only after confirming recipient was not credited.
+                        processPendingRefund(transaction);
+
+                        return toResponse(transaction);
+
+                    } 
+                    else {
+                        return toResponse(transaction);
+                    }
+
+                } catch (FeignException statusEx) {
+                    System.err.println(
+                            "Unable to confirm recipient credit after failure. HTTP Status: "
+                                    + statusEx.status()
+                    );
+                    return toResponse(transaction);
+                }
             }
 
-        }
-        catch (FeignException ex) {
-            AccountFailure failure = extractAccountFailure(ex);
-
-            if (failure != null) {
-                String reason = "Destination credit pending: " + failure.errorCode() + ": " + failure.message();
-
-                transaction.setFailureReason(reason.substring(0, Math.min(reason.length(), 500)));
-                transactionRepository.save(transaction);
-            }
-
-            System.err.println("Transfer credit pending. HTTP Status: " + ex.status());
+        } else if (!"ALREADY_PROCESSED".equals(creditStatus.status())) {
             return toResponse(transaction);
         }
 

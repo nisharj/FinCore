@@ -61,8 +61,7 @@ public class InternalAccountOperationService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Customer verification is required");
         }
 
-        Account account = accountRepo.findByIdForUpdate(accountId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found"));
+        Account account = accountRepo.findByIdForUpdate(accountId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found"));
 
         // Verify ownership.
         if (!customer.getCustomerId().equals(account.getCustomerId())) {
@@ -102,9 +101,7 @@ public class InternalAccountOperationService {
         account.setBalance(newBalance);
         accountRepo.save(account);
 
-        AccountOperation operation = new AccountOperation(
-                request.transactionReference(), operationType,
-                accountId, request.amount());
+        AccountOperation operation = new AccountOperation(request.transactionReference(), operationType, accountId, request.amount());
 
         operationRepo.save(operation);
 
@@ -118,8 +115,7 @@ public class InternalAccountOperationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Transaction reference and operation type are required");
         }
 
-        var operation = operationRepo
-                .findByTransactionReferenceAndOperationType(transactionReference, operationType);
+        var operation = operationRepo.findByTransactionReferenceAndOperationType(transactionReference, operationType);
 
         if (operation.isEmpty()) {
             return new AccountOperationResponse(null, null, transactionReference, "NOT_FOUND");
@@ -127,8 +123,7 @@ public class InternalAccountOperationService {
 
         AccountOperation existing = operation.get();
 
-        return new AccountOperationResponse(existing.getAccountId(), null, transactionReference, "ALREADY_PROCESSED"
-        );
+        return new AccountOperationResponse(existing.getAccountId(), null, transactionReference, "ALREADY_PROCESSED");
     }
 
     
@@ -140,28 +135,21 @@ public class InternalAccountOperationService {
                 || request.amount() == null
                 || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
 
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Valid transaction reference and positive amount are required"
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Valid transaction reference and positive amount are required");
         }
 
         lockOperation(request.transactionReference(), AccountOperationType.CREDIT);
 
         // Lock destination account.
         Account account = accountRepo.findByIdForUpdate(accountId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Destination account not found"
-                ));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Destination account not found"));
 
         if (!"ACTIVE".equalsIgnoreCase(account.getStatus())) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "Destination account is not active"
-            );
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Destination account is not active");
         }
 
         // Check idempotency.
-        var existingOperation =
-                operationRepo.findByTransactionReferenceAndOperationType(request.transactionReference(), AccountOperationType.CREDIT);
+        var existingOperation = operationRepo.findByTransactionReferenceAndOperationType(request.transactionReference(), AccountOperationType.CREDIT);
 
         if (existingOperation.isPresent()) {
 
@@ -197,13 +185,114 @@ public class InternalAccountOperationService {
     }
 
 
-    private void lockOperation(UUID transactionReference,
-                           AccountOperationType operationType) {
+
+    @Transactional
+    public AccountOperationResponse refund(Long accountId, AccountOperationRequest request) {
+
+        if (request == null
+                || request.transactionReference() == null
+                || request.amount() == null
+                || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
+
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Valid transaction reference and positive refund amount are required");
+        }
+
+        // Prevent duplicate refunds for the same transaction.
+        lockOperation(request.transactionReference(), AccountOperationType.REFUND);
+
+        // Lock the sender's account.
+        Account account = accountRepo.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Refund account not found"
+                ));
+
+        var originalDebit = operationRepo
+            .findByTransactionReferenceAndOperationType(
+                request.transactionReference(), AccountOperationType.DEBIT
+            );
+
+        if (originalDebit.isEmpty()
+                || !originalDebit.get().getAccountId().equals(accountId)
+                || originalDebit.get().getAmount().compareTo(request.amount()) != 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Matching original debit was not found for this refund");
+        }
+
+        var existingCredit = operationRepo
+            .findByTransactionReferenceAndOperationType(
+                request.transactionReference(), AccountOperationType.CREDIT
+            );
+
+        if (existingCredit.isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Cannot refund a transfer that has already been credited");
+        }
+
+        // Check whether this refund was already processed.
+        var existingOperation = operationRepo
+                .findByTransactionReferenceAndOperationType(
+                    request.transactionReference(),AccountOperationType.REFUND
+                );
+
+        if (existingOperation.isPresent()) {
+
+            AccountOperation previous = existingOperation.get();
+
+            if (!previous.getAccountId().equals(accountId)
+                    || previous.getAmount().compareTo(request.amount()) != 0) {
+
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Refund reference was already used with different details");
+            }
+
+            return new AccountOperationResponse(
+                    account.getId(),
+                    account.getBalance(),
+                    request.transactionReference(),
+                    "ALREADY_PROCESSED"
+            );
+        }
+
+        // Restore the sender's money.
+        BigDecimal newBalance = account.getBalance().add(request.amount());
+
+        account.setBalance(newBalance);
+        accountRepo.save(account);
+
+        // Record the refund for auditing and idempotency.
+        AccountOperation operation = new AccountOperation(
+                request.transactionReference(),
+                AccountOperationType.REFUND,
+                accountId, request.amount()
+        );
+
+        operationRepo.save(operation);
+
+        return new AccountOperationResponse(
+                account.getId(), newBalance,
+                request.transactionReference(),
+                "SUCCESS"
+        );
+    }
+
+
+    private void lockOperation(UUID transactionReference, AccountOperationType operationType) {
 
         String lockKey = transactionReference + ":" + operationType.name();
 
         entityManager.createNativeQuery("SELECT pg_advisory_xact_lock(hashtextextended(CAST(:lockKey AS text), 0))")
                 .setParameter("lockKey", lockKey)
                 .getSingleResult();
+    }
+
+
+    @Transactional(readOnly = true)
+    public AccountOperationResponse validateTransferDestination(Long accountId) {
+
+        Account account = accountRepo.findById(accountId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,"Destination account not found"));
+
+        if (!"ACTIVE".equalsIgnoreCase(account.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Destination account is not active");
+        }
+
+        return new AccountOperationResponse(account.getId(), null,null, "VALID");
     }
 }
