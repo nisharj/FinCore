@@ -7,9 +7,9 @@ spring:
     name: customer-service
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/customer_db
-    username: postgres
-    password: 123456
+    url: ${SPRING_DATASOURCE_URL_CUSTOMER:${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/customer_db}}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD}
 
   jpa:
     hibernate:
@@ -25,7 +25,7 @@ server:
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
 
 jwt:
   secret: ${JWT_SECRET}

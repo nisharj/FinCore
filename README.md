@@ -347,20 +347,21 @@ Export the following required environment variables in your terminal or configur
 
 | Variable | Description | Sample / Default Value |
 | :--- | :--- | :--- |
-| `FINCORE_INTERNAL_SECRET` | 256-bit+ cryptographic key for east-west microservice security | `fincore-super-secure-internal-secret-token-key-9988` |
-| `JWT_SECRET` | HMAC-SHA384 secret key (minimum 48 characters) | `fincore-super-secret-key-which-is-long-enough-123456` |
-| `OTP_HASH_SECRET` | Salt key used to hash 6-digit OTP codes | `otp-secret-salt-key-99118822` |
+| `FINCORE_INTERNAL_SECRET` | 256-bit+ cryptographic key for east-west microservice security | `<GENERATE_256_BIT_SECRET>` |
+| `JWT_SECRET` | HMAC-SHA384 secret key (minimum 48 characters) | `<GENERATE_48_BYTE_BASE64_SECRET>` |
+| `OTP_HASH_SECRET` | Salt key used to hash 6-digit OTP codes (minimum 32 chars) | `<GENERATE_32_CHAR_SALT>` |
+| `SPRING_DATASOURCE_USERNAME` | PostgreSQL database username | `postgres` |
+| `SPRING_DATASOURCE_PASSWORD` | PostgreSQL database password | `<YOUR_DATABASE_PASSWORD>` |
 | `MAIL_USERNAME` | SMTP mail username for KYC OTP delivery | `your-email@gmail.com` |
 | `MAIL_PASSWORD` | SMTP mail password or Gmail App Password | `xxxx-xxxx-xxxx-xxxx` |
 
 > [!TIP]
-> **PowerShell Quick Setup**:
+> **Environment Setup via `.env`**:
+> Copy `.env.example` to `.env` at the root and fill in your generated keys.
+> To generate cryptographically secure keys in PowerShell:
 > ```powershell
-> $env:FINCORE_INTERNAL_SECRET="fincore-super-secure-internal-secret-token-key-9988"
-> $env:JWT_SECRET="fincore-super-secret-key-which-is-long-enough-123456"
-> $env:OTP_HASH_SECRET="otp-secret-salt-key-99118822"
-> $env:MAIL_USERNAME="noreply.fincore@gmail.com"
-> $env:MAIL_PASSWORD="your-app-password"
+> # Generate 384-bit Base64 JWT Secret
+> $b = New-Object byte[] 48; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
 > ```
 
 ---

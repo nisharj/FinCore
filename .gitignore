@@ -1,0 +1,39 @@
+# ==============================================================================
+# FinCore Root GitIgnore
+# ==============================================================================
+
+# Environment variable files (Contains private credentials)
+.env
+.env.*
+*.env
+!.env.example
+
+# Local PowerShell runner scripts
+*.ps1
+run.ps1
+
+# Maven Build Artifacts
+**/target/
+target/
+*.jar
+*.war
+*.class
+
+# Preserve Maven Wrapper JAR
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE & Editor Configurations
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+
+# OS and Temporary Files
+Thumbs.db
+Desktop.ini
+*.log
+HELP.md
