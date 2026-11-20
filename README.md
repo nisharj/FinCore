@@ -28,6 +28,15 @@
   - [Database Provisioning](#database-provisioning)
   - [Environment Configuration](#environment-configuration)
   - [Service Startup Sequence](#service-startup-sequence)
+- [🐳 Complete Docker Deployment Guide](#-complete-docker-deployment-guide)
+  - [Docker Prerequisites](#docker-prerequisites)
+  - [Environment Variables Configuration](#environment-variables-configuration)
+  - [Host PostgreSQL Connectivity (`host.docker.internal`)](#host-postgresql-connectivity-hostdockerinternal)
+  - [Starting Eureka Discovery Server (Standalone)](#1-starting-eureka-discovery-server-standalone)
+  - [Building & Starting Compose Services](#2-building--starting-compose-services)
+  - [Inspecting Logs, Status & Health](#inspecting-logs-status--health)
+  - [Safe Stopping & Data Preservation](#safe-stopping--data-preservation)
+  - [Schema Validation Mode (`validate`)](#schema-validation-mode-validate)
 - [🎮 Interactive API Testing Cheatsheet](#-interactive-api-testing-cheatsheet)
   - [Complete User Journey Walkthrough](#complete-user-journey-walkthrough)
   - [Authentication & Customer Verification API](#authentication--customer-verification-api)
@@ -402,6 +411,161 @@ cd api-gatway && ./mvnw spring-boot:run
 ```
 
 Once running, access the Eureka Dashboard at 👉 **[http://localhost:8761](http://localhost:8761)** to verify all services are registered and healthy.
+
+---
+
+## 🐳 Complete Docker Deployment Guide
+
+The FinCore platform can be fully deployed using Docker Desktop with multi-stage container builds, custom bridge networking, and local PostgreSQL integration.
+
+### Docker Prerequisites
+- **Docker Desktop** on Windows with Linux containers enabled (`docker --version`, `docker compose version`).
+- **Java 21 Compatibility**: Build stages use `maven:3.9.11-eclipse-temurin-21` and runtime stages use `eclipse-temurin:21-jre`.
+- **Windows Host PostgreSQL (15+)**: PostgreSQL runs natively on the Windows host on port `5432` with the four initialized databases (`auth_db`, `customer_db`, `account_db`, `transaction_db`).
+
+---
+
+### Environment Variables Configuration
+
+The platform clearly distinguishes between **credentials sourced from your root `.env` file** and **infrastructure settings pre-configured directly by Docker Compose**.
+
+#### 1. Required Root `.env` Variables
+Create a `.env` file at the root of the repository (based on `.env.example`). These credentials must be provided (**never commit `.env` to Git**):
+
+- `JWT_SECRET` — Cryptographically secure HMAC-SHA384 secret key (minimum 48 characters).
+- `FINCORE_INTERNAL_SECRET` — Shared secret for internal east-west microservice security (minimum 32 characters).
+- `OTP_HASH_SECRET` — Salt key for KYC OTP hashing (minimum 32 characters).
+- `SPRING_DATASOURCE_USERNAME` — PostgreSQL username on the Windows host.
+- `SPRING_DATASOURCE_PASSWORD` — PostgreSQL password on the Windows host.
+
+#### 2. Optional Root `.env` Variables (Mail / KYC)
+- `MAIL_USERNAME` — (Optional) SMTP username for OTP delivery (defaults to empty).
+- `MAIL_PASSWORD` — (Optional) SMTP password or app password (defaults to empty).
+- `SPRING_MAIL_HOST` — (Optional) SMTP host (defaults to `smtp.gmail.com` in Compose if omitted).
+- `SPRING_MAIL_PORT` — (Optional) SMTP port (defaults to `587` in Compose if omitted).
+
+#### 3. Compose-Provided Variables (Pre-Configured Internally)
+These variables are already supplied directly inside `compose.yaml` for containerized networking. **You do not need to define them in your `.env` for Docker**:
+
+- `SPRING_DATASOURCE_URL_*` — Pointed to `jdbc:postgresql://host.docker.internal:5432/<db_name>` for each database service.
+- `EUREKA_SERVER_URL` — Injected as `http://eureka-server:8761/eureka/` across all services.
+- `CUSTOMER_SERVICE_URL` — Injected as `http://customer-service:8081` for Auth Service lookup.
+- `SPRING_JPA_HIBERNATE_DDL_AUTO` — Injected as `validate` for schema safety.
+- `SPRING_JPA_SHOW_SQL` — Injected as `false` to prevent scheduler log noise.
+
+---
+
+### Host PostgreSQL Connectivity (`host.docker.internal`)
+PostgreSQL runs on your Windows host, **not** inside a Docker container.
+
+- Microservices inside Linux containers connect to the Windows host through the special DNS name `host.docker.internal:5432`.
+- **PostgreSQL Configuration Check**:
+  1. In `postgresql.conf`, ensure `listen_addresses = '*'` is configured.
+  2. In `pg_hba.conf`, verify that incoming IPv4 connections from Docker's virtual network subnet (`172.16.0.0/12` or `0.0.0.0/0`) are permitted:
+     ```text
+     host    all             all             172.16.0.0/12            scram-sha-256
+     ```
+  3. Reload PostgreSQL service after modifying configuration.
+
+---
+
+### 1. Starting Eureka Discovery Server (Standalone)
+The Eureka discovery server acts as the network registry. Because it is configured as an external dependency on the shared `fincore-network`, start it first:
+
+```bash
+# 1. Create the dedicated Docker bridge network (if not already created)
+docker network create fincore-network
+
+# 2. Build the Eureka Server Docker image
+docker build -t fincore-eureka:1.0 ./eureka-server
+
+# 3. Run the Eureka Server container
+docker run -d \
+  --name fincore-eureka \
+  --network fincore-network \
+  -p 8761:8761 \
+  fincore-eureka:1.0
+```
+
+Verify Eureka dashboard is running by visiting: 👉 **[http://localhost:8761](http://localhost:8761)**
+
+---
+
+### 2. Building & Starting Compose Services
+The remaining five microservices are orchestrated via Docker Compose (`compose.yaml`):
+
+- `api-gateway` (Port `8080` published to host)
+- `customer-service` (Internal port `8081`)
+- `auth-service` (Internal port `8083`)
+- `account-service` (Internal port `8082`)
+- `transaction-service` (Internal port `8084`)
+
+Build and launch the stack in detached mode:
+
+```bash
+# Build images for the 5 services
+docker compose build
+
+# Start services in the background
+docker compose up -d
+```
+
+---
+
+### Inspecting Logs, Status & Health
+
+```bash
+# Check container statuses
+docker compose ps
+docker ps --filter "name=fincore"
+
+# Follow logs of a specific service
+docker compose logs -f api-gateway
+docker compose logs -f customer-service
+
+# Check Eureka registration status (all 5 services should report UP)
+curl -s -H "Accept: application/json" http://localhost:8761/eureka/apps
+
+# Check API Gateway Actuator Health
+curl -s http://localhost:8080/actuator/health
+
+# Inspect resource utilization (CPU, Memory, PIDs)
+docker stats --no-stream
+```
+
+---
+
+### Safe Stopping & Data Preservation
+
+> [!CAUTION]
+> **PRESERVE YOUR POSTGRESQL DATABASE DATA**:
+> - **DO NOT run `docker compose down -v`**. The `-v` flag deletes Docker volumes.
+> - PostgreSQL is hosted natively on your Windows host. Stopping containers does not alter your Windows PostgreSQL database data.
+
+To stop the services safely:
+
+```bash
+# Option 1: Stop running containers while preserving container state
+docker compose stop
+
+# Option 2: Stop and remove containers and networks (safe; host database data is untouched)
+docker compose down
+
+# Stop standalone Eureka container
+docker stop fincore-eureka
+docker rm fincore-eureka
+```
+
+---
+
+### Schema Validation Mode (`validate`)
+In the Docker deployment, all four database services strictly enforce:
+```yaml
+SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+```
+- **What this means**: Hibernate performs a strict pre-flight validation check between your JPA `@Entity` definitions and the existing database tables in PostgreSQL.
+- **Safety guarantee**: Hibernate will **never** execute `CREATE TABLE`, `ALTER TABLE`, or `DROP TABLE` in Docker.
+- **Requirement**: The target database tables must already exist in your Windows PostgreSQL databases before starting the containers. If validation fails on startup, verify that you have provisioned the databases and schemas.
 
 ---
 

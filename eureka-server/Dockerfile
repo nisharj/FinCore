@@ -1,4 +1,3 @@
-
 # Stage 1: Build the Spring Boot application
 FROM maven:3.9.11-eclipse-temurin-21 AS build
 
@@ -16,11 +15,17 @@ FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
-# Copy only the executable JAR from the build stage
-COPY --from=build /app/target/eureka-server-0.0.1-SNAPSHOT.jar app.jar
+# Create a dedicated non-root system group and user
+RUN groupadd -r fincore && useradd -r -g fincore -d /app -s /sbin/nologin fincore
+
+# Copy only the executable JAR from the build stage with non-root ownership
+COPY --from=build --chown=fincore:fincore /app/target/eureka-server-0.0.1-SNAPSHOT.jar app.jar
 
 # Document the application port
 EXPOSE 8761
+
+# Switch to non-root user
+USER fincore
 
 # Start Eureka Server
 ENTRYPOINT ["java", "-jar", "app.jar"]

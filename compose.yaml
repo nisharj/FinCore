@@ -1,0 +1,104 @@
+﻿services:
+  customer-service:
+    image: fincore-customer:1.0
+    build:
+      context: ./customer-service
+    restart: unless-stopped
+    environment:
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_DATASOURCE_URL_CUSTOMER: jdbc:postgresql://host.docker.internal:5432/customer_db
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:?SPRING_DATASOURCE_USERNAME is required}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD is required}
+      FINCORE_INTERNAL_SECRET: ${FINCORE_INTERNAL_SECRET:?FINCORE_INTERNAL_SECRET is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+    networks:
+      - fincore-network
+
+  auth-service:
+    image: fincore-auth:1.0
+    build:
+      context: ./auth-service
+    restart: unless-stopped
+    depends_on:
+      - customer-service
+    environment:
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_DATASOURCE_URL_AUTH: jdbc:postgresql://host.docker.internal:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:?SPRING_DATASOURCE_USERNAME is required}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      FINCORE_INTERNAL_SECRET: ${FINCORE_INTERNAL_SECRET:?FINCORE_INTERNAL_SECRET is required}
+      OTP_HASH_SECRET: ${OTP_HASH_SECRET:?OTP_HASH_SECRET is required}
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      CUSTOMER_SERVICE_URL: http://customer-service:8081
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-smtp.gmail.com}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
+    networks:
+      - fincore-network
+
+  account-service:
+    image: fincore-account:1.0
+    build:
+      context: ./account-service
+    restart: unless-stopped
+    depends_on:
+      - customer-service
+      - auth-service
+    environment:
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_DATASOURCE_URL_ACCOUNT: jdbc:postgresql://host.docker.internal:5432/account_db
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:?SPRING_DATASOURCE_USERNAME is required}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      FINCORE_INTERNAL_SECRET: ${FINCORE_INTERNAL_SECRET:?FINCORE_INTERNAL_SECRET is required}
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+    networks:
+      - fincore-network
+
+  transaction-service:
+    image: fincore-transaction:1.0
+    build:
+      context: ./transaction-service
+    restart: unless-stopped
+    depends_on:
+      - account-service
+    environment:
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_DATASOURCE_URL_TRANSACTION: jdbc:postgresql://host.docker.internal:5432/transaction_db
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:?SPRING_DATASOURCE_USERNAME is required}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      FINCORE_INTERNAL_SECRET: ${FINCORE_INTERNAL_SECRET:?FINCORE_INTERNAL_SECRET is required}
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+    networks:
+      - fincore-network
+
+  api-gateway:
+    image: fincore-gateway:1.0
+    build:
+      context: ./api-gatway
+    restart: unless-stopped
+    depends_on:
+      - customer-service
+      - auth-service
+      - account-service
+      - transaction-service
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+    ports:
+      - "8080:8080"
+    networks:
+      - fincore-network
+
+networks:
+  fincore-network:
+    external: true
+    name: fincore-network

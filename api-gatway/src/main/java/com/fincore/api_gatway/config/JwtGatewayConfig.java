@@ -30,6 +30,31 @@ public class JwtGatewayConfig {
     }
 
     // =========================
+    // AUTH ROUTES
+    // =========================
+
+    private RequestPredicate publicAuthPath() {
+        return request -> {
+            if (!"POST".equals(request.method().name())) {
+                return false;
+            }
+            String path = request.path();
+            return path.equals("/auth/register")
+                    || path.equals("/auth/login")
+                    || path.equals("/auth/customer-verification/send")
+                    || path.equals("/auth/customer-verification/verify");
+        };
+    }
+
+    @Bean
+    public RouterFunction<ServerResponse> authRoute() {
+        return route("auth-service")
+                .route(publicAuthPath(), http())
+                .filter(lb("auth-service"))
+                .build();
+    }
+
+    // =========================
     // CUSTOMER ROUTES
     // =========================
 

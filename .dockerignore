@@ -1,0 +1,42 @@
+# Version control
+.git
+.gitignore
+
+# Build outputs & dependencies
+target/
+**/target/
+*.jar
+*.war
+*.class
+
+# IDE & editors
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+
+# Environment and sensitive keys
+.env
+.env.*
+*.env
+!.env.example
+*.pem
+*.key
+
+# Database backups & SQL dumps
+database-backups/
+*.sql
+
+# Logs & temp files
+*.log
+logs/
+Thumbs.db
+Desktop.ini
+*.tmp
+
+# Documentation & markdown
+*.md

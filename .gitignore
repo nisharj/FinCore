@@ -37,3 +37,6 @@ Thumbs.db
 Desktop.ini
 *.log
 HELP.md
+
+# Local database backups (contain sensitive data)
+database-backups/
