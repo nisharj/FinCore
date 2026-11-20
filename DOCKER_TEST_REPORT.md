@@ -9,7 +9,7 @@
 
 ## A. Executive Summary
 
-A comprehensive inspection, hardening verification, and runtime integration testing of the FinCore Spring Boot microservices platform and its running Docker deployment was executed. The testing adhered strictly to all safety mandates: zero state mutation, zero schema modifications, full PostgreSQL data preservation, and absolute zero exposure of credentials or sensitive customer data.
+A comprehensive inspection, hardening verification, and runtime integration testing of the FinCore Spring Boot microservices platform and its running Docker deployment was executed. The testing adhered strictly to all safety mandates: execution of non-mutating test cases only, zero schema modifications, row count invariance across all database tables, and absolute zero exposure of credentials or sensitive customer data.
 
 All six microservice containers are actively running in Docker `Up` state (note: Docker engine `healthy` state is not reported as native Compose healthchecks are not yet configured). Service discovery via Netflix Eureka is active with all five client microservices reporting `UP`. All four database-backed services (`customer-service`, `auth-service`, `account-service`, and `transaction-service`) connect to PostgreSQL 18.6 on the Windows host via `host.docker.internal:5432`, and all four initialize cleanly under Hibernate schema validation (`validate` mode).
 
@@ -34,7 +34,7 @@ Targeted deployment improvements have been verified in the codebase:
 ### Critical Issues & Technical Findings Summary
 1. **Security Finding (Historical Git Commits)**: While working-tree files (`.gitignore`, `application.yml`, `.env.example`, `compose.yaml`) properly protect credentials, Git history commits (`baef723`, `acabb49`) previously contained credentials in this public repository. Secrets remain visible in historical commits until Git history rewriting is performed. Normal commits and pushes do not scrub historical commits. Note: The Windows PostgreSQL password has already been rotated; rotation of JWT/internal secrets is recommended only if active values deployed in `.env` have not already been replaced with fresh keys.
 2. **Operational Improvement (Healthchecks)**: Automated healthchecks using Spring Boot Actuator (`/actuator/health`) are not yet defined in [compose.yaml](compose.yaml). Services rely on restart policies without container-level readiness gating.
-3. **Internal Feign Direct Verification (COMM-01)**: Live verification was successfully executed directly against `account-service:8082` within the container network using existing database user `Mohamednishar`. The call validated Eureka dynamic resolution of `auth-service`, internal `X-Internal-Secret` header validation, and payload deserialization returning HTTP 200 with 3 customer accounts, all with zero database mutation.
+3. **Internal Feign Direct Verification (COMM-01)**: Live verification was successfully executed directly against `account-service:8082` within the container network using an authenticated request with `USER` claims for a pre-seeded test profile. The call validated Eureka dynamic resolution of `auth-service`, internal `X-Internal-Secret` header validation, and payload deserialization returning HTTP 200 with linked customer accounts, while preserving database row counts.
 
 ---
 
@@ -64,7 +64,7 @@ Targeted deployment improvements have been verified in the codebase:
 | **DB-01** | Database | Host PostgreSQL service listening on port 5432 | CLI Command | Port 5432 accepting TCP connections | Port 5432 accepting connections; TCP connection succeeded | **PASS** | `pg_isready -h localhost -p 5432` & `Test-NetConnection -Port 5432` |
 | **DB-02** | Database | HikariCP pool & JPA EntityManagerFactory startup | Container Logs | Hikari initializes and JPA connects to each DB | All 4 services log `HHH10001005: Database info` and initialize JPA factory | **PASS** | Container startup logs |
 | **DB-03** | Database | Hibernate schema validation in Docker | Container Logs | Validation succeeds against PostgreSQL 18.6 | All 4 services booted cleanly with `ddl-auto: validate` without schema errors | **PASS** | Container startup logs |
-| **DB-04** | Database | Data safety and baseline row count preservation | SQL Queries | Table row counts identical before and after testing | All 6 tables verified unchanged (Customers: 4, Users: 6, Verifications: 1, Accounts: 5, Operations: 26, Transactions: 17) | **PASS** | SQL count verification pre/post test |
+| **DB-04** | Database | Baseline table row count preservation | SQL Queries | Table row counts identical before and after testing | Row counts confirmed identical across all 6 tables pre/post test (Customers: 4, Users: 6, Verifications: 1, Accounts: 5, Operations: 26, Transactions: 17), verifying zero row additions or deletions during read-only testing | **PASS** | SQL count verification pre/post test |
 | **GW-01** | Gateway | Verify Gateway root availability | HTTP Request | Gateway handles requests and returns Spring response | HTTP 404 with JSON error body returned | **PASS** | `curl -i http://localhost:8080/` |
 | **GW-02** | Gateway | Verify Gateway actuator health endpoint | HTTP Request | HTTP 200 `{"status":"UP"}` | HTTP 200 `{"groups":["liveness","readiness"],"status":"UP"}` | **PASS** | `curl -i http://localhost:8080/actuator/health` |
 | **GW-03** | Gateway | Reject requests missing Authorization header | HTTP Request | HTTP 401 Unauthorized | HTTP 401 `Missing or invalid Authorization header` | **PASS** | `curl -i http://localhost:8080/customers` |
@@ -80,7 +80,7 @@ Targeted deployment improvements have been verified in the codebase:
 | **SEC-01** | Security | External blocking of internal endpoints at Gateway | HTTP Request | Gateway returns 404 for `/internal/**` | `/customers/internal/**`, `/accounts/internal/**`, and `/auth/internal/**` all return HTTP 404 through Gateway | **PASS** | `curl -i http://localhost:8080/customers/internal/...` |
 | **SEC-02** | Security | Reject missing `X-Internal-Secret` on internal endpoints | HTTP Request | HTTP 403 Forbidden | HTTP 403 Forbidden returned across all internal service controllers | **PASS** | Direct container curl tests to ports 8081, 8082, 8083 |
 | **SEC-03** | Security | Reject invalid `X-Internal-Secret` on internal endpoints | HTTP Request | HTTP 403 Forbidden | HTTP 403 Forbidden returned (`Invalid internal secret`) | **PASS** | Direct container curl tests with dummy header |
-| **COMM-01** | Feign | Verify Account Service -> Auth Service Feign call | Live Invocation | Feign discovers `auth-service` and transfers data successfully | Verified via container network invocation: Account Service resolved Auth Service via Eureka, transmitted `X-Internal-Secret`, deserialized `CustomerLinkResponse(customerId=11, verified=true)`, and returned HTTP 200 with 3 customer accounts | **PASS** | Direct container curl `GET http://account-service:8082/accounts` with `sub: Mohamednishar` -> HTTP 200 |
+| **COMM-01** | Feign | Verify Account Service -> Auth Service Feign call | Live Invocation | Feign discovers `auth-service` and transfers data successfully | Verified via container network invocation: Account Service resolved Auth Service via Eureka, transmitted `X-Internal-Secret`, deserialized `CustomerLinkResponse(customerId=[REDACTED], verified=true)`, and returned HTTP 200 with customer account list | **PASS** | Direct container curl `GET http://account-service:8082/accounts` with `USER` token (`sub: [TEST_USER]`) -> HTTP 200 |
 | **DOC-01** | Docs | README Docker deployment documentation | Document Review | README documents Docker Compose setup, network, and commands | Comprehensive Docker guide added covering prerequisites, `.env` vs Compose variables, Eureka standalone setup, and safe shutdown | **PASS** | `README.md` text inspection |
 | **E2E-01** | E2E | End-to-end KYC OTP verification journey | Live Walkthrough | Issue and verify OTP via email | Requires live SMTP credentials and user state mutation | **NOT TESTED** | Mandated safety rule #10 & #11 |
 | **E2E-02** | E2E | End-to-end distributed fund transfer saga | Live Walkthrough | Debit sender and credit receiver with compensating refund | Requires creating transactional test balances | **NOT TESTED** | Mandated safety rule #10 & #11 |
@@ -123,8 +123,8 @@ Targeted deployment improvements have been verified in the codebase:
 ### 7. [RESOLVED] Verified Inter-Service OpenFeign Data Exchange (COMM-01)
 - **Status:** **PASS / Resolved**
 - **Location:** `account-service` -> `auth-service` via OpenFeign
-- **Resolution:** Live invocation within `fincore-network` to `http://account-service:8082/accounts` using a valid JWT for existing user `Mohamednishar`.
-- **Details:** `account-service` dynamically resolved `auth-service` via Eureka, propagated the internal `X-Internal-Secret` header to `/auth/internal/customer-link`, and successfully deserialized the response (`CustomerLinkResponse(customerId=11, verified=true)`), returning HTTP 200 with 3 customer accounts (`ACC-USER-DISPOSABLE-01`, `ACC-USER-1001`). Confirmed in container logs with zero errors and zero database mutation.
+- **Resolution:** Live invocation within `fincore-network` to `http://account-service:8082/accounts` using an authenticated request with `USER` role claims for an existing pre-seeded profile.
+- **Details:** `account-service` dynamically resolved `auth-service` via Eureka, propagated the internal `X-Internal-Secret` header to `/auth/internal/customer-link`, and successfully deserialized the response (`CustomerLinkResponse(customerId=[REDACTED], verified=true)`), returning HTTP 200 with matching customer accounts (`[REDACTED_ACCOUNT_LIST]`). Confirmed in container logs with zero errors and invariant database row counts.
 
 ---
 
@@ -139,26 +139,27 @@ Targeted deployment improvements have been verified in the codebase:
 
 ---
 
-## E. Database Safety Confirmation
+## E. Database Safety & Row Count Verification
 
-In compliance with Critical Safety Rules 1, 2, 5, 10, 11, 16, and 17:
+In compliance with Critical Safety Rules:
 - No database schemas, tables, sequences, or constraints were created, altered, or deleted.
 - No `docker compose down -v` or Docker volume modifications were executed.
-- All containers ran with `SPRING_JPA_HIBERNATE_DDL_AUTO: validate`.
-- Live SQL row count verifications confirmed 100% database state preservation.
+- All containers ran strictly with `SPRING_JPA_HIBERNATE_DDL_AUTO: validate`.
+- Executed integration tests were strictly non-mutating (read queries and rejected validation calls); stateful write flows (user registration, OTP generation, fund transfers) were intentionally omitted.
+- Live SQL row count audits verified that record counts remained strictly invariant across all 4 databases and 6 application tables before and after testing.
 
 ### Row Count Audit (Pre-Test vs Post-Test)
 
-| Database | Table Name | Pre-Test Row Count | Post-Test Row Count | Status |
+| Database | Table Name | Pre-Test Row Count | Post-Test Row Count | Row Count Status |
 |---|---|---:|---:|---|
-| **customer_db** | `customers` | 4 | 4 | **UNCHANGED (Preserved)** |
-| **auth_db** | `customer_verifications` | 1 | 1 | **UNCHANGED (Preserved)** |
-| **auth_db** | `users` | 6 | 6 | **UNCHANGED (Preserved)** |
-| **account_db** | `account` | 5 | 5 | **UNCHANGED (Preserved)** |
-| **account_db** | `account_operations` | 26 | 26 | **UNCHANGED (Preserved)** |
-| **transaction_db** | `transactions` | 17 | 17 | **UNCHANGED (Preserved)** |
+| **customer_db** | `customers` | 4 | 4 | **INVARIANT (Identical)** |
+| **auth_db** | `customer_verifications` | 1 | 1 | **INVARIANT (Identical)** |
+| **auth_db** | `users` | 6 | 6 | **INVARIANT (Identical)** |
+| **account_db** | `account` | 5 | 5 | **INVARIANT (Identical)** |
+| **account_db** | `account_operations` | 26 | 26 | **INVARIANT (Identical)** |
+| **transaction_db** | `transactions` | 17 | 17 | **INVARIANT (Identical)** |
 
-**Conclusion:** 100% database state preservation verified. Zero rows added, deleted, or mutated.
+**Audit Conclusion & Scope Boundary:** Invariant row counts confirm that zero rows were inserted or deleted during test execution. Because testing was designed to be non-mutating (read-only queries and negative input validation), existing records were not updated. Note that equal row counts demonstrate unchanged counts rather than unconditionally proving unmutated field contents across all individual table columns (which would require cryptographic row hashing or full-table column diffing); the claim of data preservation is supported by row count invariance combined with the non-mutating nature of the executed tests.
 
 ---
 
