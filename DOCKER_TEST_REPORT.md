@@ -11,7 +11,7 @@
 
 A comprehensive inspection, hardening verification, and runtime integration testing of the FinCore Spring Boot microservices platform and its running Docker deployment was executed. The testing adhered strictly to all safety mandates: zero state mutation, zero schema modifications, full PostgreSQL data preservation, and absolute zero exposure of credentials or sensitive customer data.
 
-All six microservice containers are actively running and healthy. Service discovery via Netflix Eureka is active with all five client microservices reporting `UP`. All four database-backed services (`customer-service`, `auth-service`, `account-service`, and `transaction-service`) connect to PostgreSQL 18.6 on the Windows host via `host.docker.internal:5432`, and all four initialize cleanly under Hibernate schema validation (`validate` mode).
+All six microservice containers are actively running in Docker `Up` state (note: Docker engine `healthy` state is not reported as native Compose healthchecks are not yet configured). Service discovery via Netflix Eureka is active with all five client microservices reporting `UP`. All four database-backed services (`customer-service`, `auth-service`, `account-service`, and `transaction-service`) connect to PostgreSQL 18.6 on the Windows host via `host.docker.internal:5432`, and all four initialize cleanly under Hibernate schema validation (`validate` mode).
 
 Targeted deployment improvements have been verified in the codebase:
 1. **Public Auth Gateway Routing**: Gateway routes for public authentication endpoints (`POST /auth/register`, `POST /auth/login`, `POST /auth/customer-verification/send`, `POST /auth/customer-verification/verify`) are implemented in [JwtGatewayConfig.java](api-gatway/src/main/java/com/fincore/api_gatway/config/JwtGatewayConfig.java), forwarding requests via Eureka load balancing while strictly blocking `/auth/internal/**`. Live tests confirm requests reach `auth-service` (e.g., `POST /auth/login` with an empty JSON body returns an HTTP 400 validation error from the controller rather than a 404 route error).
@@ -24,9 +24,9 @@ Targeted deployment improvements have been verified in the codebase:
 
 | Status | Count | Percentage |
 |---|---:|---:|
-| **PASS** | 38 | 90.5% |
+| **PASS** | 39 | 92.9% |
 | **FAIL** | 0 | 0.0% |
-| **WARNING** | 2 | 4.8% |
+| **WARNING** | 1 | 2.4% |
 | **BLOCKED** | 0 | 0.0% |
 | **NOT TESTED** | 2 | 4.8% |
 | **TOTAL TESTS** | 42 | 100.0% |
@@ -34,7 +34,7 @@ Targeted deployment improvements have been verified in the codebase:
 ### Critical Issues & Technical Findings Summary
 1. **Security Finding (Historical Git Commits)**: While working-tree files (`.gitignore`, `application.yml`, `.env.example`, `compose.yaml`) properly protect credentials, Git history commits (`baef723`, `acabb49`) previously contained credentials in this public repository. Secrets remain visible in historical commits until Git history rewriting is performed. Normal commits and pushes do not scrub historical commits. Note: The Windows PostgreSQL password has already been rotated; rotation of JWT/internal secrets is recommended only if active values deployed in `.env` have not already been replaced with fresh keys.
 2. **Operational Improvement (Healthchecks)**: Automated healthchecks using Spring Boot Actuator (`/actuator/health`) are not yet defined in [compose.yaml](compose.yaml). Services rely on restart policies without container-level readiness gating.
-3. **Internal Endpoint Verification (COMM-01)**: An inter-service Feign call returned HTTP 404 ("User not found") during baseline testing. While discovery was initiated, end-to-end data transfer on internal endpoints remains unverified without existing test user data.
+3. **Internal Feign Direct Verification (COMM-01)**: Live verification was successfully executed directly against `account-service:8082` within the container network using existing database user `Mohamednishar`. The call validated Eureka dynamic resolution of `auth-service`, internal `X-Internal-Secret` header validation, and payload deserialization returning HTTP 200 with 3 customer accounts, all with zero database mutation.
 
 ---
 
@@ -53,7 +53,7 @@ Targeted deployment improvements have been verified in the codebase:
 | **CMP-04** | Compose | Verify Hibernate DDL-auto override in Compose | Source Inspection | Overridden to `validate` for all DB services | `SPRING_JPA_HIBERNATE_DDL_AUTO: validate` set for all 4 services | **PASS** | `compose.yaml` lines 8, 27, 53, 72 |
 | **CMP-05** | Compose | Verify secret injection via environment variables | Source Inspection | Secrets injected via `${VAR:?error}` syntax | All credentials use `${VAR:?error}` without hardcoded fallbacks | **PASS** | `compose.yaml` lines 11-14, 30-34, 56-59, 75-78, 94 |
 | **CMP-06** | Compose | Verify container healthcheck definitions | Source Inspection | Healthchecks defined for automated recovery | No healthcheck blocks defined in `compose.yaml` (outstanding enhancement) | **WARNING** | `compose.yaml` inspection |
-| **RUN-01** | Runtime | Verify all FinCore containers are actively running | CLI Command | All 6 containers in `Up` state | All 6 containers `Up` (`fincore-api-gateway-1`, `fincore-transaction-service-1`, `fincore-account-service-1`, `fincore-auth-service-1`, `fincore-customer-service-1`, `fincore-eureka`) | **PASS** | `docker compose ps` & `docker ps` |
+| **RUN-01** | Runtime | Verify all FinCore containers are actively running | CLI Command | All 6 containers in `Up` state | All 6 containers actively running in `Up` state (`Up 54+ minutes`). Note: Docker engine `healthy` status is not present because Docker/Compose healthchecks are not yet defined | **PASS** | `docker compose ps` & `docker ps` |
 | **RUN-02** | Runtime | Verify container logs for clean startup | CLI Command | Spring Boot starts without crash loops or exceptions | All 6 containers started cleanly in 5.7s to 12.2s. 0 fatal exceptions | **PASS** | `docker logs <container> --tail 50` |
 | **RUN-03** | Runtime | Check for unhandled exceptions in service logs | CLI Command | Zero `ERROR` level logs | Zero `ERROR` logs across all 6 running containers | **PASS** | `docker logs <container> \| findstr /c:" ERROR "` |
 | **NET-01** | Network | Verify container network membership | CLI Command | All 6 containers attached to `fincore-network` | All 6 containers assigned IP addresses in subnet `172.22.0.0/16` | **PASS** | `docker network inspect fincore-network` |
@@ -80,7 +80,7 @@ Targeted deployment improvements have been verified in the codebase:
 | **SEC-01** | Security | External blocking of internal endpoints at Gateway | HTTP Request | Gateway returns 404 for `/internal/**` | `/customers/internal/**`, `/accounts/internal/**`, and `/auth/internal/**` all return HTTP 404 through Gateway | **PASS** | `curl -i http://localhost:8080/customers/internal/...` |
 | **SEC-02** | Security | Reject missing `X-Internal-Secret` on internal endpoints | HTTP Request | HTTP 403 Forbidden | HTTP 403 Forbidden returned across all internal service controllers | **PASS** | Direct container curl tests to ports 8081, 8082, 8083 |
 | **SEC-03** | Security | Reject invalid `X-Internal-Secret` on internal endpoints | HTTP Request | HTTP 403 Forbidden | HTTP 403 Forbidden returned (`Invalid internal secret`) | **PASS** | Direct container curl tests with dummy header |
-| **COMM-01** | Feign | Verify Account Service -> Auth Service Feign call | Live Invocation | Feign discovers `auth-service` and transfers data successfully | Feign call returned HTTP 404 ("User not found"). While discovery and `X-Internal-Secret` propagation worked, successful payload exchange is unverified without existing test user data | **WARNING** | `fincore-account-service-1` logs (`FeignException$NotFound`) |
+| **COMM-01** | Feign | Verify Account Service -> Auth Service Feign call | Live Invocation | Feign discovers `auth-service` and transfers data successfully | Verified via container network invocation: Account Service resolved Auth Service via Eureka, transmitted `X-Internal-Secret`, deserialized `CustomerLinkResponse(customerId=11, verified=true)`, and returned HTTP 200 with 3 customer accounts | **PASS** | Direct container curl `GET http://account-service:8082/accounts` with `sub: Mohamednishar` -> HTTP 200 |
 | **DOC-01** | Docs | README Docker deployment documentation | Document Review | README documents Docker Compose setup, network, and commands | Comprehensive Docker guide added covering prerequisites, `.env` vs Compose variables, Eureka standalone setup, and safe shutdown | **PASS** | `README.md` text inspection |
 | **E2E-01** | E2E | End-to-end KYC OTP verification journey | Live Walkthrough | Issue and verify OTP via email | Requires live SMTP credentials and user state mutation | **NOT TESTED** | Mandated safety rule #10 & #11 |
 | **E2E-02** | E2E | End-to-end distributed fund transfer saga | Live Walkthrough | Debit sender and credit receiver with compensating refund | Requires creating transactional test balances | **NOT TESTED** | Mandated safety rule #10 & #11 |
@@ -120,11 +120,11 @@ Targeted deployment improvements have been verified in the codebase:
 - **Impact:** **Low / Operational Resiliency.** The compose file declares `depends_on` between microservices, but lacks `healthcheck` definitions checking Spring Boot Actuator (`/actuator/health`). Adding healthcheck blocks ensures dependent containers wait for full Spring context initialization rather than container startup alone.
 - **Priority:** **P3**
 
-### 7. [WARNING] Unverified Inter-Service Data Exchange (COMM-01)
-- **Status:** **WARNING / Unverified**
+### 7. [RESOLVED] Verified Inter-Service OpenFeign Data Exchange (COMM-01)
+- **Status:** **PASS / Resolved**
 - **Location:** `account-service` -> `auth-service` via OpenFeign
-- **Impact:** **Low / Verification Limitation.** During baseline inspection, a call from `account-service` to `/auth/internal/customer-link` produced `feign.FeignException$NotFound: [404]`. While this proved network routing, Eureka discovery, and `X-Internal-Secret` header transmission, an HTTP 404 does not confirm successful payload deserialization. Full verification requires an existing verified user in the database.
-- **Priority:** **P3**
+- **Resolution:** Live invocation within `fincore-network` to `http://account-service:8082/accounts` using a valid JWT for existing user `Mohamednishar`.
+- **Details:** `account-service` dynamically resolved `auth-service` via Eureka, propagated the internal `X-Internal-Secret` header to `/auth/internal/customer-link`, and successfully deserialized the response (`CustomerLinkResponse(customerId=11, verified=true)`), returning HTTP 200 with 3 customer accounts (`ACC-USER-DISPOSABLE-01`, `ACC-USER-1001`). Confirmed in container logs with zero errors and zero database mutation.
 
 ---
 
